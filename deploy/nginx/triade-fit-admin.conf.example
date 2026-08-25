@@ -1,6 +1,6 @@
 server {
     listen 80;
-    server_name admin.triade-fit.com;
+    server_name admin-triade-fit.testes-techcode.shop;
 
     location / {
         proxy_pass http://127.0.0.1:4174;
