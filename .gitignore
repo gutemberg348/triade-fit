@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files and credentials (keep only safe templates)
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Build artifacts
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+**/coverage/
+
+# Expo / React Native local state
+.expo/
+**/.expo/
+.expo-shared/
+**/.expo-shared/
+.expo-validation-*/
+mobile/.metro-health-check*
+mobile/web-build/
+
+# Runtime uploads are persistent server data, never source code
+uploads/*
+backend/uploads/*
+!uploads/.gitkeep
+!backend/uploads/.gitkeep
+
+# Docker local overrides, volumes and temporary files
+docker-compose.override.yml
+docker-data/
+postgres-data/
+*.tar
+*.tar.gz
+*.dump
+
+# Logs, temporary files and caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.pid.lock
+.cache/
+tmp/
+temp/
+.codex-temp/
+
+# Editors and operating system
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Certificates, private keys and server-only files
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer

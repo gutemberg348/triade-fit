@@ -1,0 +1,1 @@
+ALTER TABLE "Lesson" ADD COLUMN "unlockDelayHours" INTEGER NOT NULL DEFAULT 0;

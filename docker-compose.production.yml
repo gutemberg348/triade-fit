@@ -1,0 +1,43 @@
+name: triade-fit
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: triade-fit-postgres
+    restart: unless-stopped
+    env_file:
+      - ${TRIADE_ENV_FILE:-.env.production}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - triade_fit_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: triade-fit-api
+    restart: unless-stopped
+    env_file:
+      - ${TRIADE_ENV_FILE:-.env.production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # A API fica privada no servidor. O Nginx/Caddy faz HTTPS para ela.
+      - "127.0.0.1:${TRIADE_API_PORT:-3333}:3333"
+    volumes:
+      - triade_fit_uploads:/app/backend/uploads
+
+volumes:
+  triade_fit_postgres:
+    name: triade_fit_postgres
+  triade_fit_uploads:
+    name: triade_fit_uploads

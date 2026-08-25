@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Triade FIT",
+    "slug": "essenza-personal",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon-essenza.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#100b0a"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon-essenza.png",
+        "backgroundColor": "#100b0a"
+      },
+      "package": "com.triadefit.app"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.essenza.personal",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "A Triade FIT usa suas fotos para registrar sua evolução corporal."
+      }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita o acesso para adicionar fotos à sua evolução."
+        }
+      ],
+      "expo-video"
+    ]
+  }
+}

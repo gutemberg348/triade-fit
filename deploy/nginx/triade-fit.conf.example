@@ -1,0 +1,17 @@
+server {
+    listen 80;
+    server_name api.triade-fit.com;
+
+    # Depois de apontar o DNS, gere o certificado com Certbot e deixe-o
+    # redirecionar HTTP para HTTPS.
+    location / {
+        proxy_pass http://127.0.0.1:3333;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 150M;
+        proxy_read_timeout 180s;
+    }
+}
