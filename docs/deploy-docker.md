@@ -1,6 +1,6 @@
 # Publicacao do backend com Docker
 
-Este guia sobe somente a API Triade FIT e seu PostgreSQL. Ele nao usa PM2 e nao altera os processos dos bots existentes no servidor.
+Este guia sobe a API Triade FIT, o PostgreSQL e o painel administrativo React. Ele nao usa PM2 e nao altera os processos dos bots existentes no servidor.
 
 ## Antes de subir
 
@@ -13,17 +13,17 @@ Este guia sobe somente a API Triade FIT e seu PostgreSQL. Ele nao usa PM2 e nao 
 
 ## Clone enxuto no servidor (opcional)
 
-O mobile e o admin nao sao necessarios para a API Docker. Para baixar somente `backend`, `deploy` e os arquivos da raiz do repositorio, use sparse checkout:
+O mobile nao e necessario na VPS, mas o admin React sera servido nela. Para baixar somente `backend`, `admin`, `deploy` e os arquivos da raiz do repositorio, use sparse checkout:
 
 ```bash
 git clone --filter=blob:none --no-checkout git@github.com:SEU_USUARIO/triade-fit.git triade-fit
 cd triade-fit
 git sparse-checkout init --cone
-git sparse-checkout set backend deploy
+git sparse-checkout set backend admin deploy
 git checkout main
 ```
 
-O modo cone sempre traz os arquivos da raiz, incluindo `package.json`, `package-lock.json`, `docker-compose.production.yml` e `.env.production.example`. O Dockerfile e o `.dockerignore` foram preparados para nao depender de `mobile` nem `admin` no servidor.
+O modo cone sempre traz os arquivos da raiz, incluindo `package.json`, `package-lock.json`, `docker-compose.production.yml` e `.env.production.example`. Os Dockerfiles foram preparados para nao depender de `mobile` no servidor.
 
 ## Subida
 
@@ -39,6 +39,8 @@ curl http://127.0.0.1:3333/api/health
 
 O container aplica `prisma migrate deploy` automaticamente antes de iniciar a API. Ele **nao** executa `seed`, pois o seed atual remove todos os registros e so pode ser usado em uma base vazia de demonstracao.
 
+O container `triade-fit-admin` gera o React/Vite em modo producao e o entrega como site estatico. `VITE_API_URL` e incorporada no build; se essa URL mudar, execute `docker compose -f docker-compose.production.yml up -d --build admin` novamente.
+
 Na primeira subida de uma base vazia, crie o administrador definido em `ADMIN_EMAIL` e `ADMIN_PASSWORD`:
 
 ```bash
@@ -51,12 +53,13 @@ Se a porta `3333` ja estiver ocupada por outro projeto no host, altere somente `
 
 ## HTTPS
 
-Copie `deploy/nginx/triade-fit.conf.example` para a configuracao do Nginx, confira a porta configurada em `proxy_pass`, valide e recarregue:
+Copie `deploy/nginx/triade-fit.conf.example` para a API e `deploy/nginx/triade-fit-admin.conf.example` para o painel. Confira as portas configuradas em `proxy_pass`, valide e recarregue:
 
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
 sudo certbot --nginx -d api.triade-fit.com
+sudo certbot --nginx -d admin.triade-fit.com
 ```
 
 Depois, confirme:

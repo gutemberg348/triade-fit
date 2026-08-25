@@ -1022,11 +1022,12 @@ Antes do primeiro uso real:
 
 ## 24. Publicação em VPS com containers
 
-O modo de produção em VPS usa `docker-compose.production.yml`, separado do `docker-compose.yml` local. Ele cria dois containers: `triade-fit-api` (Node/Express/Prisma) e `triade-fit-postgres` (PostgreSQL 16). Os bots existentes continuam sob PM2 e não são gerenciados por esse Compose.
+O modo de produção em VPS usa `docker-compose.production.yml`, separado do `docker-compose.yml` local. Ele cria três containers: `triade-fit-api` (Node/Express/Prisma), `triade-fit-postgres` (PostgreSQL 16) e `triade-fit-admin` (React/Vite entregue por Nginx interno). Os bots existentes continuam sob PM2 e não são gerenciados por esse Compose.
 
 - `backend/Dockerfile` instala apenas o workspace do backend, gera o Prisma Client e, ao iniciar, executa `prisma migrate deploy`; `seed` nunca é executado automaticamente porque apaga dados demonstrativos e reais.
 - `triade_fit_postgres` e `triade_fit_uploads` são volumes nomeados que preservam banco e arquivos locais entre reinícios. `docker compose down -v` remove esses volumes e não pode ser usado em produção.
 - PostgreSQL não publica porta externa. A API publica apenas `127.0.0.1:${TRIADE_API_PORT}:3333`; Nginx/Caddy no host deve prover HTTPS e encaminhar para essa porta.
+- O admin usa `127.0.0.1:${TRIADE_ADMIN_PORT}:80`; o Nginx do host entrega `https://admin.triade-fit.com`. `VITE_API_URL` é pública e é incorporada durante o build estático do painel.
 - O backend continua na porta interna `3333`. Se o host já a utiliza, altere apenas `TRIADE_API_PORT` (por exemplo, `3340`) e ajuste o proxy; a URL pública permanece `https://api.triade-fit.com`.
 - Os valores de produção ficam exclusivamente em `.env.production`, criado a partir de `.env.production.example` e ignorado pelo Git. Incluem `DATABASE_URL` com host `postgres`, segredos JWT, domínios CORS, `PUBLIC_BASE_URL`, SMTP e credenciais Asaas de produção.
 - O app Android de produção deve receber `EXPO_PUBLIC_API_URL=https://api.triade-fit.com/api`; chaves do Asaas nunca entram no Expo nem no painel.

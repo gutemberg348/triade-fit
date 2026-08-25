@@ -36,6 +36,18 @@ services:
     volumes:
       - triade_fit_uploads:/app/backend/uploads
 
+  admin:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: triade-fit-admin
+    restart: unless-stopped
+    ports:
+      # O Nginx existente no host entrega o dominio do painel em HTTPS.
+      - "127.0.0.1:${TRIADE_ADMIN_PORT:-4174}:80"
+
 volumes:
   triade_fit_postgres:
     name: triade_fit_postgres
