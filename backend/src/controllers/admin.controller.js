@@ -349,6 +349,53 @@ export const updateStudent = async (req, res) => {
   return getStudent(req, res);
 };
 
+export const changeStudentPassword = async (req, res) => {
+  const student = await prisma.user.findFirst({
+    where: { id: req.params.id, role: "STUDENT" },
+    select: { id: true },
+  });
+  if (!student) throw new AppError(404, "Aluno não encontrado.");
+
+  const changedAt = new Date();
+  const passwordHash = await bcrypt.hash(req.body.password, 12);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: student.id },
+      data: { passwordHash, passwordChangedAt: changedAt },
+    }),
+    prisma.refreshToken.updateMany({
+      where: { userId: student.id, revokedAt: null },
+      data: { revokedAt: changedAt },
+    }),
+  ]);
+
+  res.json({ message: "Senha alterada. As sessões da aluna foram encerradas." });
+};
+
+export const deleteStudent = async (req, res) => {
+  const student = await prisma.user.findFirst({
+    where: { id: req.params.id, role: "STUDENT" },
+    select: {
+      id: true,
+      studentProfile: {
+        select: { partnerProfile: { select: { id: true } } },
+      },
+    },
+  });
+  if (!student) throw new AppError(404, "Aluno não encontrado.");
+
+  await prisma.$transaction(async (tx) => {
+    const partnerId = student.studentProfile?.partnerProfile?.id;
+    if (partnerId) {
+      // Referral.partner usa Restrict; removemos as indicações antes do perfil.
+      await tx.referral.deleteMany({ where: { partnerId } });
+    }
+    await tx.user.delete({ where: { id: student.id } });
+  });
+
+  res.status(204).send();
+};
+
 export const addStudentMeasurement = async (req, res) => {
   const student = await prisma.studentProfile.findFirst({
     where: { userId: req.params.id, user: { role: "STUDENT" } },

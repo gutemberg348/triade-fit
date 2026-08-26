@@ -349,6 +349,26 @@ select {
   color: #ffc2b9;
   background: rgba(238, 141, 127, 0.08);
   font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+.has-error > span {
+  color: #ffaaa0;
+}
+.has-error input,
+.has-error textarea,
+.has-error select,
+[aria-invalid="true"] {
+  border-color: rgba(255, 107, 107, 0.75) !important;
+  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1) !important;
+}
+.admin-field-error {
+  display: block;
+  margin-top: 6px;
+  color: #ffaaa0;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
 }
 .admin-shell {
   display: grid;
@@ -1485,6 +1505,59 @@ tbody tr:hover {
 }
 .student-action--warning {
   border-color: rgba(255, 255, 255, 0.17) !important;
+}
+.student-action--danger {
+  border-color: rgba(255, 107, 107, 0.3) !important;
+  color: #ff9b9b !important;
+  background: rgba(255, 107, 107, 0.055) !important;
+}
+.student-action--danger:hover {
+  border-color: rgba(255, 107, 107, 0.65) !important;
+  background: rgba(255, 107, 107, 0.1) !important;
+}
+.student-feedback {
+  margin-bottom: 14px;
+}
+.student-delete-warning {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 107, 107, 0.28);
+  border-radius: 16px;
+  color: #ffd0d0;
+  background: rgba(255, 107, 107, 0.07);
+}
+.student-delete-warning > svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: #ff8f8f;
+}
+.student-delete-warning strong {
+  font-size: 13px;
+}
+.student-delete-warning p {
+  margin-top: 6px;
+  color: #c9aaaa;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.student-delete-confirmation {
+  display: block;
+  margin-bottom: 20px;
+}
+.student-delete-button {
+  border: 1px solid rgba(255, 107, 107, 0.5);
+  color: #fff;
+  background: #a72f38;
+}
+.student-delete-button:hover:not(:disabled) {
+  background: #bf3944;
+}
+.student-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 .student-summary {
   gap: 14px;

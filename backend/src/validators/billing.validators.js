@@ -34,6 +34,28 @@ const isValidCnpj = (value) => {
 
 const isValidCpfCnpj = (value) => isValidCpf(value) || isValidCnpj(value);
 
+const isValidCardNumber = (value) => {
+  const digitsOnly = value.replace(/\D/g, "");
+  if (
+    digitsOnly.length < 13 ||
+    digitsOnly.length > 19 ||
+    /^(\d)\1+$/.test(digitsOnly)
+  )
+    return false;
+  let sum = 0;
+  let double = false;
+  for (let index = digitsOnly.length - 1; index >= 0; index -= 1) {
+    let number = Number(digitsOnly[index]);
+    if (double) {
+      number *= 2;
+      if (number > 9) number -= 9;
+    }
+    sum += number;
+    double = !double;
+  }
+  return sum % 10 === 0;
+};
+
 export const billingIdentityShape = {
   cpfCnpj: digits("o CPF ou CNPJ").refine(
     isValidCpfCnpj,
@@ -66,10 +88,7 @@ export const cardPaymentSchema = z.object({
     .min(3, "Informe o nome impresso no cartão.")
     .max(100),
   cardNumber: digits("o número do cartão").refine(
-    (value) => {
-      const length = value.replace(/\D/g, "").length;
-      return length >= 13 && length <= 19;
-    },
+    isValidCardNumber,
     "Informe um número de cartão válido.",
   ),
   expiryMonth: digits("o mês de validade").refine(

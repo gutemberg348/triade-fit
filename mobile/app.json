@@ -16,7 +16,11 @@
         "foregroundImage": "./assets/icon-essenza.png",
         "backgroundColor": "#100b0a"
       },
-      "package": "com.triadefit.app"
+      "package": "com.triadefit.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "supportsTablet": true,
@@ -33,6 +37,11 @@
         }
       ],
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "987b83a3-2d33-4553-a458-d46b80f9519b"
+      }
+    }
   }
 }

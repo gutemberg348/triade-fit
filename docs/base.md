@@ -530,6 +530,8 @@ Fluxo de foto em duas etapas:
 | `POST` | `/admin/students` | criar aluno e matrículas informadas |
 | `GET` | `/admin/students/:id` | ficha completa e evolução |
 | `PUT` | `/admin/students/:id` | dados, status, perfil e matrículas |
+| `PUT` | `/admin/students/:id/password` | redefinir senha e encerrar todas as sessões da aluna |
+| `DELETE` | `/admin/students/:id` | excluir permanentemente a aluna e seus dados dependentes |
 | `POST` | `/admin/students/:id/measurements` | avaliação feita pela personal |
 | `GET` | `/admin/programs` | árvore não arquivada de conteúdo |
 | `POST` / `PUT` / `DELETE` | `/admin/programs[/:id]` | criar, editar ou arquivar programa |
@@ -552,10 +554,17 @@ Formato normal:
 
 ```json
 {
-  "error": "Mensagem legível",
-  "details": {}
+  "error": "Não foi possível salvar: Informe um e-mail válido.",
+  "details": {
+    "fieldErrors": {
+      "email": ["Informe um e-mail válido."]
+    },
+    "formErrors": []
+  }
 }
 ```
+
+O middleware `validate` converte mensagens técnicas do Zod para português e conserva erros separados por campo. O helper `errorMessage` do admin transforma `details.fieldErrors` em uma lista com rótulos legíveis para todos os formulários. O cadastro de aluna também usa `validationErrors` para marcar o input inválido e exibir a orientação logo abaixo, limpando apenas o erro do campo que está sendo corrigido.
 
 Status comuns:
 
@@ -617,7 +626,7 @@ Comportamentos importantes:
 - `useApi` concentra estado inicial, erro e recarga de GET;
 - busca de alunos tem debounce de 300 ms e pede até 50 registros;
 - cadastro de aluno usa senha inicial preenchida e envia `programIds: []`;
-- ficha do aluno permite ativar/inativar, editar dados e adicionar avaliação;
+- ficha do aluno permite ativar/inativar, editar dados, redefinir senha com revogação de sessões, excluir com confirmação forte e adicionar avaliação;
 - programas são geridos em árvore e “excluir” arquiva;
 - a área Comunidade separa postagens e avisos, permite upload ou URL de imagem e controla publicação/rascunho;
 - Configurações do app publica textos, imagem de login, banners e preços de Pix/cartão com prévia do cálculo de juros;
@@ -674,11 +683,13 @@ Responsabilidade das telas:
 - **Comunidade**: alterna entre postagens do feed e avisos publicados pelo painel; imagens das postagens abrem em visualização ampliada e o coração permite curtir/descurtir sem exibir contagem;
 - **Perfil**: exibe conta, edita dados e avatar, troca senha e encerra sessão.
 
-O aplicativo está configurado como `com.essenza.personal`, em orientação retrato e tema escuro. O ícone principal é `mobile/assets/icon-essenza.png`; a splash usa `mobile/assets/splash.png`.
+O aplicativo Android está configurado como `com.triadefit.app`, em orientação retrato e tema escuro. O ícone principal é `mobile/assets/icon-essenza.png`; a splash usa `mobile/assets/splash.png`.
 
 Em agosto de 2026, as telas mobile de home, programas e evolução foram redesenhadas com metadados visuais de aula, números/ícones com hierarquia editorial, métricas históricas e semanais, conquistas, barras de progresso acessíveis, cartão de gráfico com escala/data, resumo de variação, histórico legível e cadastro de medidas em camadas. Programas usam apresentação de catálogo: módulos têm capa ampla e capítulos possuem miniatura numerada, ícone de estado, metadados e estado bloqueado. A tela do capítulo exibe arquivos/links em uma seção própria. A tela `MeditationSessionScreen` é acessada dentro da aula quando o admin habilita a prática guiada; o feed de comunidade também foi incluído. O app carrega Inter via `@expo-google-fonts/inter` no `App.js`; ao criar novas telas, use os tokens de `theme/index.js`, os componentes de `components/UI.js`, a paleta carvão/cobre e contraste alto. Não use fonte serif.
 
 As imagens padrão da dona e da campanha ficam em `backend/public/brand`: `triade-fit-login.png`, `triade-fit-home.png`, `triade-fit-focus.png` e `triade-fit-balance.png`. Elas foram preparadas para login, home e capas de módulos, sem texto embutido, permitindo sobreposição de UI nativa. O admin pode substituí-las por upload/URL a qualquer momento.
+
+Na entrada, o mobile guarda a última resposta de `/app-config` no AsyncStorage e pré-carrega uma nova `loginImageUrl` antes de exibi-la. Na primeira instalação, mostra apenas um estado de carregamento da marca enquanto consulta a configuração; não mostra uma capa padrão e depois a troca pela capa administrativa. Os formulários de autenticação usam rolagem, `KeyboardAvoidingView` e `android.softwareKeyboardLayoutMode = resize` para manter o campo focado visível acima do teclado.
 
 Ao criar programa, módulo ou capítulo sem capa, o backend escolhe automaticamente uma dessas imagens de marca; portanto o catálogo nunca precisa nascer com miniatura vazia. Uma capa enviada pela Personal sempre substitui esse padrão.
 
@@ -956,6 +967,8 @@ O primeiro plano comercial continua sendo de acesso por período e cobrança ún
 
 ### Fluxo completo
 
+Na tela de pagamento, e-mail e telefone partem dos dados da conta. CPF/CNPJ, telefone, CEP, número do cartão, validade e CVV recebem máscara e limite durante a digitação. Ao completar oito números do CEP, o mobile consulta o ViaCEP e preenche rua e bairro automaticamente. O preenchimento manual continua disponível se o serviço externo estiver indisponível.
+
 1. ao criar uma conta de aluna, `StudentProfile.accessStatus` começa em `PENDING_PAYMENT`;
 2. a navegação mobile mostra apenas a tela de acesso pendente e o backend recusa conteúdo, medidas e avisos protegidos;
 3. a tela consulta `GET /api/app-config`, apresenta separadamente o total no Pix e o total/parcelas/juros do cartão e espera a escolha da cliente;
@@ -990,10 +1003,12 @@ No arquivo `backend/.env`, preencha:
 
 ```env
 PUBLIC_BASE_URL=https://api.seudominio.com
-ASAAS_API_KEY=sua_chave_da_conta_asaas
+ASAAS_API_KEY='$aact_hmlg_COLE_A_CHAVE_COMPLETA_AQUI'
 ASAAS_ENV=sandbox
 ASAAS_WEBHOOK_TOKEN=um_token-forte-com-32-ou-mais-caracteres
 ```
+
+Em `.env.production` usado pelo Docker Compose, mantenha a chave entre **aspas simples**. O `$` inicial faz parte da chave e, sem essa proteção, pode ser interpretado como variável e chegar truncado ao container. Sandbox usa prefixo `$aact_hmlg_`; produção usa `$aact_prod_`, sempre junto de `ASAAS_ENV` correspondente.
 
 - use `sandbox` enquanto testa e `production` somente com a chave de produção;
 - `PUBLIC_BASE_URL` precisa ser uma URL pública em HTTPS na produção; `localhost` e IP da rede local não são acessíveis pelo Asaas para o Webhook;
@@ -1002,6 +1017,8 @@ ASAAS_WEBHOOK_TOKEN=um_token-forte-com-32-ou-mais-caracteres
 - aplique a migration antes de testar: `npm --workspace backend run prisma:deploy`.
 
 O endpoint legado de Checkout hospedado continua disponível por compatibilidade, mas o mobile usa Pix e cartão internos. A fonte de verdade é o estado consultado no Asaas pela sincronização manual e, em produção, também pelo Webhook autenticado.
+
+Erros conhecidos do gateway são `AppError` operacionais e podem ser mostrados ao cliente sem dados sensíveis: ambiente incompatível, chave recusada, campo inválido, limite de requisições ou indisponibilidade. Exceções inesperadas continuam retornando apenas “Erro interno do servidor”. O backend nunca registra o corpo enviado ao endpoint de cartão.
 
 ## 23. Preparação para produção
 

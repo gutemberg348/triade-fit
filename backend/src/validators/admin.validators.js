@@ -43,6 +43,16 @@ export const studentUpdateSchema = z.object({
   partnerId: z.uuid().nullable().optional(),
 });
 
+export const studentPasswordSchema = z
+  .object({
+    password,
+    passwordConfirmation: z.string(),
+  })
+  .refine((data) => data.password === data.passwordConfirmation, {
+    message: "As senhas não são iguais.",
+    path: ["passwordConfirmation"],
+  });
+
 export const partnerSchema = z.object({
   active: z.boolean().default(true),
   referralCode: z

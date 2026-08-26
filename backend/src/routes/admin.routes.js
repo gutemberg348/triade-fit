@@ -13,6 +13,7 @@ import {
   partnerSchema,
   programSchema,
   studentCreateSchema,
+  studentPasswordSchema,
   studentUpdateSchema,
 } from "../validators/admin.validators.js";
 import * as controller from "../controllers/admin.controller.js";
@@ -53,6 +54,17 @@ router.put(
   validate(idParams, "params"),
   validate(studentUpdateSchema),
   asyncHandler(controller.updateStudent),
+);
+router.put(
+  "/students/:id/password",
+  validate(idParams, "params"),
+  validate(studentPasswordSchema),
+  asyncHandler(controller.changeStudentPassword),
+);
+router.delete(
+  "/students/:id",
+  validate(idParams, "params"),
+  asyncHandler(controller.deleteStudent),
 );
 router.post(
   "/students/:id/measurements",

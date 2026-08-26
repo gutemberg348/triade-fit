@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Edit3,
   Handshake,
+  KeyRound,
   Mail,
   Phone,
   Plus,
@@ -13,8 +14,9 @@ import {
   Scale,
   ShieldCheck,
   ShieldOff,
+  Trash2,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   CartesianGrid,
   Line,
@@ -47,12 +49,19 @@ const formatDate = (date) =>
   new Intl.DateTimeFormat("pt-BR").format(new Date(date));
 export default function StudentDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data, loading, error, reload } = useApi(`/admin/students/${id}`);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [studentForm, setStudentForm] = useState({});
   const [partnerForm, setPartnerForm] = useState({});
+  const [passwordForm, setPasswordForm] = useState({
+    password: "",
+    passwordConfirmation: "",
+  });
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [measurement, setMeasurement] = useState({
     measuredAt: new Date().toISOString().slice(0, 10),
     notes: "",
@@ -118,12 +127,76 @@ export default function StudentDetail() {
   };
   const updateStatus = async () => {
     setSaving(true);
+    setFormError("");
+    setFeedback("");
     try {
       await api.put(`/admin/students/${id}`, {
         status: student.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
       });
       await reload();
+      setFeedback(
+        student.status === "ACTIVE"
+          ? "Conta desativada. A aluna não consegue mais entrar."
+          : "Conta reativada com sucesso.",
+      );
+    } catch (err) {
+      setFormError(errorMessage(err));
     } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPasswordEditor = () => {
+    setPasswordForm({ password: "", passwordConfirmation: "" });
+    setFormError("");
+    setModal("password");
+  };
+
+  const submitPassword = async (event) => {
+    event.preventDefault();
+    setFormError("");
+    if (passwordForm.password.length < 8) {
+      setFormError("A nova senha precisa ter pelo menos 8 caracteres.");
+      return;
+    }
+    if (!/[A-Za-z]/.test(passwordForm.password) || !/[0-9]/.test(passwordForm.password)) {
+      setFormError("A nova senha precisa ter letras e números.");
+      return;
+    }
+    if (passwordForm.password !== passwordForm.passwordConfirmation) {
+      setFormError("As senhas não são iguais.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data: result } = await api.put(
+        `/admin/students/${id}/password`,
+        passwordForm,
+      );
+      setModal(null);
+      setFeedback(result.message);
+    } catch (err) {
+      setFormError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openDeleteConfirmation = () => {
+    setDeleteConfirmation("");
+    setFormError("");
+    setModal("delete");
+  };
+
+  const deleteStudent = async () => {
+    if (deleteConfirmation !== "EXCLUIR") return;
+    setSaving(true);
+    setFormError("");
+    try {
+      await api.delete(`/admin/students/${id}`);
+      navigate("/alunos", { replace: true });
+    } catch (err) {
+      setFormError(errorMessage(err));
       setSaving(false);
     }
   };
@@ -214,6 +287,8 @@ export default function StudentDetail() {
       <Link className="back-link" to="/alunos">
         <ArrowLeft /> Voltar para alunos
       </Link>
+      {feedback && <div className="form-success student-feedback">{feedback}</div>}
+      {formError && !modal && <div className="form-error student-feedback">{formError}</div>}
       <section className="student-hero">
         <div className="student-hero__identity">
           <span className="avatar-large">{student.name.charAt(0)}</span>
@@ -270,6 +345,12 @@ export default function StudentDetail() {
             </button>
             <button className="button secondary student-action" onClick={openPartnerEditor} title="Configurar conta parceira">
               <Handshake /> <span>{profile.partnerProfile ? "Conta parceira" : "Tornar parceira"}</span>
+            </button>
+            <button className="button secondary student-action" onClick={openPasswordEditor} title="Definir uma nova senha para a aluna">
+              <KeyRound /> <span>Alterar senha</span>
+            </button>
+            <button className="button secondary student-action student-action--danger" onClick={openDeleteConfirmation} title="Excluir permanentemente esta aluna">
+              <Trash2 /> <span>Excluir aluna</span>
             </button>
           </div>
         </div>
@@ -514,6 +595,94 @@ export default function StudentDetail() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+      {modal === "password" && (
+        <Modal title="Alterar senha da aluna" onClose={() => setModal(null)}>
+          <form className="form-grid" onSubmit={submitPassword}>
+            {formError && <div className="form-error full">{formError}</div>}
+            <p className="muted full">
+              Defina uma senha temporária para {student.name}. Ao salvar, todas
+              as sessões abertas dessa conta serão encerradas.
+            </p>
+            <label className="full">
+              <span>Nova senha</span>
+              <input
+                type="password"
+                value={passwordForm.password}
+                onChange={(event) =>
+                  setPasswordForm({ ...passwordForm, password: event.target.value })
+                }
+                minLength="8"
+                autoComplete="new-password"
+                required
+              />
+              <small>Use pelo menos 8 caracteres, com letras e números.</small>
+            </label>
+            <label className="full">
+              <span>Confirmar nova senha</span>
+              <input
+                type="password"
+                value={passwordForm.passwordConfirmation}
+                onChange={(event) =>
+                  setPasswordForm({
+                    ...passwordForm,
+                    passwordConfirmation: event.target.value,
+                  })
+                }
+                minLength="8"
+                autoComplete="new-password"
+                required
+              />
+            </label>
+            <div className="form-actions full">
+              <button type="button" className="button secondary" onClick={() => setModal(null)}>
+                Cancelar
+              </button>
+              <button className="button primary" disabled={saving}>
+                {saving ? "Alterando..." : "Salvar nova senha"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {modal === "delete" && (
+        <Modal title="Excluir aluna permanentemente" onClose={() => setModal(null)}>
+          <div className="student-delete-warning">
+            <Trash2 />
+            <div>
+              <strong>Essa ação não pode ser desfeita.</strong>
+              <p>
+                A conta de {student.name}, medidas, fotos, progresso, pagamentos
+                e vínculos serão removidos. Para apenas impedir o acesso, use
+                “Desativar conta”.
+              </p>
+            </div>
+          </div>
+          {formError && <div className="form-error">{formError}</div>}
+          <label className="student-delete-confirmation">
+            <span>Digite EXCLUIR para confirmar</span>
+            <input
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              autoComplete="off"
+              placeholder="EXCLUIR"
+            />
+          </label>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={() => setModal(null)}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="button student-delete-button"
+              disabled={saving || deleteConfirmation !== "EXCLUIR"}
+              onClick={deleteStudent}
+            >
+              <Trash2 /> {saving ? "Excluindo..." : "Excluir definitivamente"}
+            </button>
+          </div>
         </Modal>
       )}
       {modal === "partner" && (

@@ -40,11 +40,12 @@ export const errorHandler = (error, _req, res, _next) => {
       return res.status(404).json({ error: "Registro não encontrado." });
   }
   const status = error.statusCode || 500;
+  const isOperational = error instanceof AppError;
   if (status >= 500) console.error(error);
   return res
     .status(status)
     .json({
-      error: status >= 500 ? "Erro interno do servidor." : error.message,
-      details: error.details,
+      error: isOperational ? error.message : "Erro interno do servidor.",
+      ...(isOperational && error.details ? { details: error.details } : {}),
     });
 };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Plus, Search, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
-import api, { errorMessage } from "../services/api.js";
+import api, { errorMessage, validationErrors } from "../services/api.js";
 import {
   EmptyState,
   ErrorState,
@@ -19,6 +19,10 @@ const initialForm = {
   objective: "",
   birthDate: "",
 };
+
+const FieldError = ({ message }) =>
+  message ? <small className="admin-field-error">{message}</small> : null;
+
 export default function Students() {
   const [data, setData] = useState(null);
   const [search, setSearch] = useState("");
@@ -26,6 +30,8 @@ export default function Students() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(initialForm);
+  const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 300);
@@ -45,10 +51,33 @@ export default function Students() {
   useEffect(() => {
     load();
   }, [debounced]);
+  const openCreate = () => {
+    setForm(initialForm);
+    setFormError("");
+    setFieldErrors({});
+    setModal(true);
+  };
+  const closeCreate = () => {
+    if (saving) return;
+    setModal(false);
+    setFormError("");
+    setFieldErrors({});
+  };
+  const updateForm = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+    setFormError("");
+  };
   const submit = async (event) => {
     event.preventDefault();
     setSaving(true);
-    setError("");
+    setFormError("");
+    setFieldErrors({});
     try {
       await api.post("/admin/students", {
         ...form,
@@ -59,7 +88,8 @@ export default function Students() {
       setForm(initialForm);
       await load();
     } catch (err) {
-      setError(errorMessage(err));
+      setFieldErrors(validationErrors(err));
+      setFormError(errorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -71,7 +101,7 @@ export default function Students() {
         title="Alunos"
         description="Uma visão humana e completa de cada jornada."
         action={
-          <button className="button primary" onClick={() => setModal(true)}>
+          <button className="button primary" onClick={openCreate}>
             <Plus /> Novo aluno
           </button>
         }
@@ -149,73 +179,81 @@ export default function Students() {
           title="Nenhum aluno encontrado"
           text="Ajuste sua busca ou cadastre a primeira pessoa desta jornada."
           action={
-            <button className="button primary" onClick={() => setModal(true)}>
+            <button className="button primary" onClick={openCreate}>
               <UserPlus /> Cadastrar aluno
             </button>
           }
         />
       )}
       {modal && (
-        <Modal title="Novo aluno" onClose={() => setModal(false)}>
-          <form className="form-grid" onSubmit={submit}>
-            {error && <div className="form-error full">{error}</div>}
-            <label className="full">
+        <Modal title="Novo aluno" onClose={closeCreate}>
+          <form className="form-grid" onSubmit={submit} noValidate>
+            {formError && <div className="form-error full">{formError}</div>}
+            <label className={`full ${fieldErrors.name ? "has-error" : ""}`}>
               <span>Nome</span>
               <input
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => updateForm("name", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.name)}
                 required
               />
+              <FieldError message={fieldErrors.name} />
             </label>
-            <label>
+            <label className={fieldErrors.email ? "has-error" : ""}>
               <span>E-mail</span>
               <input
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => updateForm("email", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.email)}
                 required
               />
+              <FieldError message={fieldErrors.email} />
             </label>
-            <label>
+            <label className={fieldErrors.phone ? "has-error" : ""}>
               <span>Telefone</span>
               <input
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                onChange={(e) => updateForm("phone", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.phone)}
               />
+              <FieldError message={fieldErrors.phone} />
             </label>
-            <label>
+            <label className={fieldErrors.birthDate ? "has-error" : ""}>
               <span>Data de nascimento</span>
               <input
                 type="date"
                 value={form.birthDate}
-                onChange={(e) =>
-                  setForm({ ...form, birthDate: e.target.value })
-                }
+                onChange={(e) => updateForm("birthDate", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.birthDate)}
               />
+              <FieldError message={fieldErrors.birthDate} />
             </label>
-            <label>
+            <label className={fieldErrors.password ? "has-error" : ""}>
               <span>Senha inicial</span>
               <input
                 value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                onChange={(e) => updateForm("password", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.password)}
                 required
               />
+              <FieldError message={fieldErrors.password} />
             </label>
-            <label className="full">
+            <label className={`full ${fieldErrors.objective ? "has-error" : ""}`}>
               <span>Objetivo</span>
               <textarea
                 value={form.objective}
-                onChange={(e) =>
-                  setForm({ ...form, objective: e.target.value })
-                }
+                onChange={(e) => updateForm("objective", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.objective)}
                 rows="3"
               />
+              <FieldError message={fieldErrors.objective} />
             </label>
             <div className="form-actions full">
               <button
                 type="button"
                 className="button secondary"
-                onClick={() => setModal(false)}
+                onClick={closeCreate}
               >
                 Cancelar
               </button>

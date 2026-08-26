@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -7,11 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ArrowRight, Clock3, LockKeyhole, Mail, Phone, RefreshCw, User } from "lucide-react-native";
 import {
   Building2,
@@ -29,6 +31,110 @@ import { Brand, Button, Screen } from "../components/UI.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import api, { messageFrom } from "../services/api.js";
 import { colors, radii } from "../theme/index.js";
+
+const APP_CONFIG_CACHE_KEY = "@triade-fit/app-config";
+
+const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
+
+const maskCpfCnpj = (value) => {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 11)
+    return digits
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1-$2");
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+};
+
+const maskPhone = (value) => {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (!digits.length) return "";
+  if (digits.length < 3) return `(${digits}`;
+  if (digits.length <= 10)
+    return digits.replace(/^(\d{2})(\d{0,4})(\d{0,4})$/, (_all, ddd, first, last) =>
+      `(${ddd})${first ? ` ${first}` : ""}${last ? `-${last}` : ""}`,
+    );
+  return digits.replace(/^(\d{2})(\d{0,5})(\d{0,4})$/, (_all, ddd, first, last) =>
+    `(${ddd})${first ? ` ${first}` : ""}${last ? `-${last}` : ""}`,
+  );
+};
+
+const maskPostalCode = (value) =>
+  onlyDigits(value).slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
+
+const maskCardNumber = (value) =>
+  onlyDigits(value).slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 ");
+
+const isValidCpf = (value) => {
+  const cpf = onlyDigits(value);
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+  const digit = (size) => {
+    const sum = cpf
+      .slice(0, size)
+      .split("")
+      .reduce((total, number, index) => total + Number(number) * (size + 1 - index), 0);
+    const result = (sum * 10) % 11;
+    return result === 10 ? 0 : result;
+  };
+  return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]);
+};
+
+const isValidCnpj = (value) => {
+  const cnpj = onlyDigits(value);
+  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
+  const digit = (base, factors) => {
+    const sum = base
+      .split("")
+      .reduce((total, number, index) => total + Number(number) * factors[index], 0);
+    const result = 11 - (sum % 11);
+    return result >= 10 ? 0 : result;
+  };
+  const first = digit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const second = digit(`${cnpj.slice(0, 12)}${first}`, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return first === Number(cnpj[12]) && second === Number(cnpj[13]);
+};
+
+const isValidCpfCnpj = (value) => isValidCpf(value) || isValidCnpj(value);
+
+const isValidCardNumber = (value) => {
+  const digits = onlyDigits(value);
+  if (digits.length < 13 || digits.length > 19 || /^(\d)\1+$/.test(digits)) return false;
+  let sum = 0;
+  let double = false;
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    let number = Number(digits[index]);
+    if (double) {
+      number *= 2;
+      if (number > 9) number -= 9;
+    }
+    sum += number;
+    double = !double;
+  }
+  return sum % 10 === 0;
+};
+
+const paymentFormatters = {
+  cpfCnpj: maskCpfCnpj,
+  phone: maskPhone,
+  postalCode: maskPostalCode,
+  address: (value) => String(value || "").slice(0, 150),
+  addressNumber: (value) => String(value || "").slice(0, 20),
+  complement: (value) => String(value || "").slice(0, 80),
+  province: (value) => String(value || "").slice(0, 100),
+  cardHolderName: (value) => String(value || "")
+    .replace(/[0-9]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .toUpperCase()
+    .slice(0, 100),
+  cardNumber: maskCardNumber,
+  expiryMonth: (value) => onlyDigits(value).slice(0, 2),
+  expiryYear: (value) => onlyDigits(value).slice(0, 4),
+  cvv: (value) => onlyDigits(value).slice(0, 4),
+};
 
 function Field({ icon: Icon, ...props }) {
   return (
@@ -93,6 +199,7 @@ function RegistrationField({ label, error, icon: Icon, hint, containerStyle, ...
 }
 export function LoginScreen({ navigation }) {
   const { login } = useAuth();
+  const scrollRef = useRef(null);
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -100,8 +207,44 @@ export function LoginScreen({ navigation }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [appConfig, setAppConfig] = useState(null);
+  const [configReady, setConfigReady] = useState(false);
+  const [loginImageFailed, setLoginImageFailed] = useState(false);
   useEffect(() => {
-    api.get("/app-config").then(({ data }) => setAppConfig(data)).catch(() => null);
+    let mounted = true;
+    const loadConfig = async () => {
+      let cachedConfig = null;
+      try {
+        const cached = await AsyncStorage.getItem(APP_CONFIG_CACHE_KEY);
+        if (cached) {
+          cachedConfig = JSON.parse(cached);
+          if (mounted) {
+            setAppConfig(cachedConfig);
+            setConfigReady(true);
+          }
+        }
+      } catch {
+        cachedConfig = null;
+      }
+
+      try {
+        const { data } = await api.get("/app-config");
+        if (data?.loginImageUrl && data.loginImageUrl !== cachedConfig?.loginImageUrl)
+          await Image.prefetch(data.loginImageUrl).catch(() => false);
+        await AsyncStorage.setItem(APP_CONFIG_CACHE_KEY, JSON.stringify(data));
+        if (mounted) {
+          setLoginImageFailed(false);
+          setAppConfig(data);
+        }
+      } catch {
+        // Sem rede, mantemos no aparelho a ultima configuracao carregada.
+      } finally {
+        if (mounted) setConfigReady(true);
+      }
+    };
+    loadConfig();
+    return () => {
+      mounted = false;
+    };
   }, []);
   const submit = async () => {
     setLoading(true);
@@ -114,20 +257,42 @@ export function LoginScreen({ navigation }) {
       setLoading(false);
     }
   };
+  if (!configReady)
+    return (
+      <View style={styles.authLoading}>
+        <Brand />
+        <ActivityIndicator color={colors.primaryLight} size="small" />
+      </View>
+    );
+
+  const remoteLoginImage = appConfig?.loginImageUrl && !loginImageFailed;
+  const revealFocusedField = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 180);
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ImageBackground
-        source={appConfig?.loginImageUrl ? { uri: appConfig.loginImageUrl } : require("../../assets/essenza-cover.png")}
+        source={remoteLoginImage ? { uri: appConfig.loginImageUrl } : require("../../assets/essenza-cover.png")}
         style={styles.authBg}
         imageStyle={{ opacity: 0.64 }}
+        onError={() => setLoginImageFailed(true)}
       >
         <LinearGradient
           colors={["rgba(5,5,7,.08)", "rgba(5,5,7,.68)", colors.deep]}
           style={styles.authGradient}
         >
+          <ScrollView
+            ref={scrollRef}
+            style={styles.authScroll}
+            contentContainerStyle={styles.authScrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            showsVerticalScrollIndicator={false}
+          >
           <View style={styles.authContent}>
             <Brand />
             <View style={styles.copy}>
@@ -144,6 +309,8 @@ export function LoginScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               value={form.email}
+              onFocus={revealFocusedField}
+              returnKeyType="next"
               onChangeText={(email) => setForm({ ...form, email })}
             />
             <Field
@@ -151,6 +318,9 @@ export function LoginScreen({ navigation }) {
               placeholder="Sua senha"
               secureTextEntry
               value={form.password}
+              onFocus={revealFocusedField}
+              returnKeyType="done"
+              onSubmitEditing={submit}
               onChangeText={(password) => setForm({ ...form, password })}
             />
             <Button
@@ -168,6 +338,7 @@ export function LoginScreen({ navigation }) {
               </Pressable>
             </View>
           </View>
+          </ScrollView>
         </LinearGradient>
       </ImageBackground>
     </KeyboardAvoidingView>
@@ -249,7 +420,7 @@ export function RegisterScreen({ navigation }) {
   return (
     <KeyboardAvoidingView
       style={styles.registerKeyboard}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <Screen header="Criar minha conta" onBack={navigation.goBack}>
         <View style={styles.registerHero}>
@@ -350,9 +521,12 @@ export function AccessPendingScreen() {
   const [paymentMode, setPaymentMode] = useState("");
   const [pixData, setPixData] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepFeedback, setCepFeedback] = useState("");
+  const lastCepRequest = useRef("");
   const [paymentForm, setPaymentForm] = useState({
     cpfCnpj: "",
-    phone: user?.phone || "",
+    phone: maskPhone(user?.phone || ""),
     postalCode: "",
     address: "",
     addressNumber: "",
@@ -365,9 +539,11 @@ export function AccessPendingScreen() {
     cvv: "",
   });
   const canPay = status === "PENDING_PAYMENT";
-  const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
   const updatePayment = (field, value) => {
-    setPaymentForm((current) => ({ ...current, [field]: value }));
+    const formatted = paymentFormatters[field]
+      ? paymentFormatters[field](value)
+      : value;
+    setPaymentForm((current) => ({ ...current, [field]: formatted }));
     setFieldErrors((current) => {
       if (!current[field]) return current;
       const next = { ...current };
@@ -376,9 +552,72 @@ export function AccessPendingScreen() {
     });
     setError("");
   };
+  useEffect(() => {
+    const cep = onlyDigits(paymentForm.postalCode);
+    if (cep.length !== 8) {
+      lastCepRequest.current = "";
+      setCepLoading(false);
+      setCepFeedback(cep.length ? "Digite os 8 números do CEP." : "");
+      return undefined;
+    }
+    if (lastCepRequest.current === cep) return undefined;
+    lastCepRequest.current = cep;
+    let active = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    setCepLoading(true);
+    setCepFeedback("Consultando o CEP...");
+    fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("CEP_REQUEST_FAILED");
+        return response.json();
+      })
+      .then((data) => {
+        if (!active) return;
+        if (data?.erro) {
+          setFieldErrors((current) => ({
+            ...current,
+            postalCode: "CEP não encontrado. Confira os números.",
+          }));
+          setCepFeedback("");
+          return;
+        }
+        setPaymentForm((current) => ({
+          ...current,
+          address: data?.logradouro || current.address,
+          province: data?.bairro || current.province,
+        }));
+        setFieldErrors((current) => {
+          const next = { ...current };
+          delete next.postalCode;
+          if (data?.logradouro) delete next.address;
+          if (data?.bairro) delete next.province;
+          return next;
+        });
+        const city = [data?.localidade, data?.uf].filter(Boolean).join(" - ");
+        setCepFeedback(city ? `${city} · endereço preenchido` : "Endereço preenchido pelo CEP.");
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        setCepFeedback(
+          requestError?.name === "AbortError"
+            ? "A consulta demorou. Você ainda pode preencher o endereço manualmente."
+            : "Não foi possível consultar agora. Preencha o endereço manualmente.",
+        );
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        if (active) setCepLoading(false);
+      });
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [paymentForm.postalCode]);
   const validatePayment = (withCard = false) => {
     const errors = {};
-    if (![11, 14].includes(onlyDigits(paymentForm.cpfCnpj).length))
+    if (!isValidCpfCnpj(paymentForm.cpfCnpj))
       errors.cpfCnpj = "Informe um CPF ou CNPJ válido.";
     if (![10, 11].includes(onlyDigits(paymentForm.phone).length))
       errors.phone = "Informe um celular válido com DDD.";
@@ -397,7 +636,7 @@ export function AccessPendingScreen() {
       const now = new Date();
       if (paymentForm.cardHolderName.trim().length < 3)
         errors.cardHolderName = "Informe o nome impresso no cartão.";
-      if (cardNumber.length < 13 || cardNumber.length > 19)
+      if (!isValidCardNumber(cardNumber))
         errors.cardNumber = "Informe um número de cartão válido.";
       if (month < 1 || month > 12)
         errors.expiryMonth = "Use um mês entre 01 e 12.";
@@ -537,10 +776,22 @@ export function AccessPendingScreen() {
       <Text style={styles.paymentSectionTitle}>Dados da pagadora</Text>
       <Text style={styles.paymentSectionText}>Usados somente pelo Asaas para processar este pagamento.</Text>
       <RegistrationField
+        label="E-mail da cobrança"
+        icon={Mail}
+        value={user?.email || ""}
+        editable={false}
+        selectTextOnFocus
+        autoComplete="email"
+        textContentType="emailAddress"
+        hint="Preenchido automaticamente com o e-mail da sua conta."
+      />
+      <RegistrationField
         label="CPF ou CNPJ"
         icon={IdCard}
         placeholder="000.000.000-00"
         keyboardType="number-pad"
+        maxLength={18}
+        autoComplete="off"
         value={paymentForm.cpfCnpj}
         error={fieldErrors.cpfCnpj}
         onChangeText={(value) => updatePayment("cpfCnpj", value)}
@@ -550,6 +801,10 @@ export function AccessPendingScreen() {
         icon={Phone}
         placeholder="(00) 00000-0000"
         keyboardType="phone-pad"
+        maxLength={15}
+        autoComplete="tel"
+        textContentType="telephoneNumber"
+        importantForAutofill="yes"
         value={paymentForm.phone}
         error={fieldErrors.phone}
         onChangeText={(value) => updatePayment("phone", value)}
@@ -561,8 +816,13 @@ export function AccessPendingScreen() {
           icon={MapPin}
           placeholder="00000-000"
           keyboardType="number-pad"
+          maxLength={9}
+          autoComplete="postal-code"
+          textContentType="postalCode"
+          importantForAutofill="yes"
           value={paymentForm.postalCode}
           error={fieldErrors.postalCode}
+          hint={cepLoading ? "Consultando o CEP..." : cepFeedback || "Rua e bairro serão preenchidos automaticamente."}
           onChangeText={(value) => updatePayment("postalCode", value)}
         />
         <RegistrationField
@@ -579,6 +839,9 @@ export function AccessPendingScreen() {
         label="Endereço"
         icon={MapPin}
         placeholder="Rua ou avenida"
+        autoComplete="street-address"
+        textContentType="streetAddressLine1"
+        importantForAutofill="yes"
         value={paymentForm.address}
         error={fieldErrors.address}
         onChangeText={(value) => updatePayment("address", value)}
@@ -604,7 +867,7 @@ export function AccessPendingScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.registerKeyboard}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <Screen style={styles.accessScreen}>
       <View style={styles.accessCard}>
@@ -709,6 +972,9 @@ export function AccessPendingScreen() {
                   icon={User}
                   placeholder="NOME COMO ESTÁ NO CARTÃO"
                   autoCapitalize="characters"
+                  autoComplete="cc-name"
+                  textContentType="name"
+                  importantForAutofill="yes"
                   value={paymentForm.cardHolderName}
                   error={fieldErrors.cardHolderName}
                   onChangeText={(value) => updatePayment("cardHolderName", value)}
@@ -718,6 +984,10 @@ export function AccessPendingScreen() {
                   icon={CreditCard}
                   placeholder="0000 0000 0000 0000"
                   keyboardType="number-pad"
+                  maxLength={23}
+                  autoComplete="cc-number"
+                  textContentType="creditCardNumber"
+                  importantForAutofill="yes"
                   value={paymentForm.cardNumber}
                   error={fieldErrors.cardNumber}
                   onChangeText={(value) => updatePayment("cardNumber", value)}
@@ -730,6 +1000,8 @@ export function AccessPendingScreen() {
                     placeholder="MM"
                     keyboardType="number-pad"
                     maxLength={2}
+                    autoComplete="cc-exp-month"
+                    importantForAutofill="yes"
                     value={paymentForm.expiryMonth}
                     error={fieldErrors.expiryMonth}
                     onChangeText={(value) => updatePayment("expiryMonth", value)}
@@ -741,6 +1013,8 @@ export function AccessPendingScreen() {
                     placeholder="AAAA"
                     keyboardType="number-pad"
                     maxLength={4}
+                    autoComplete="cc-exp-year"
+                    importantForAutofill="yes"
                     value={paymentForm.expiryYear}
                     error={fieldErrors.expiryYear}
                     onChangeText={(value) => updatePayment("expiryYear", value)}
@@ -753,6 +1027,8 @@ export function AccessPendingScreen() {
                     keyboardType="number-pad"
                     secureTextEntry
                     maxLength={4}
+                    autoComplete="cc-csc"
+                    importantForAutofill="yes"
                     value={paymentForm.cvv}
                     error={fieldErrors.cvv}
                     onChangeText={(value) => updatePayment("cvv", value)}
@@ -937,9 +1213,12 @@ export function ResetPasswordScreen({ route, navigation }) {
   );
 }
 const styles = StyleSheet.create({
+  authLoading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18, backgroundColor: colors.bg },
   authBg: { flex: 1, backgroundColor: colors.bg },
-  authGradient: { flex: 1, justifyContent: "flex-end" },
-  authContent: { padding: 24, paddingTop: 70, paddingBottom: 36, backgroundColor: "rgba(5,5,7,.08)" },
+  authGradient: { flex: 1 },
+  authScroll: { flex: 1 },
+  authScrollContent: { flexGrow: 1, justifyContent: "flex-end" },
+  authContent: { padding: 24, paddingTop: 70, paddingBottom: 68, backgroundColor: "rgba(5,5,7,.08)" },
   registerKeyboard: { flex: 1 },
   copy: { marginTop: 90, marginBottom: 25 },
   eyebrow: {
@@ -980,11 +1259,14 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, height: "100%", color: colors.text },
   links: {
-    marginTop: 18,
+    minHeight: 46,
+    marginTop: 16,
+    paddingHorizontal: 4,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
   },
-  link: { color: colors.copperLight, fontSize: 11, fontWeight: "700" },
+  link: { paddingVertical: 12, color: colors.copperLight, fontSize: 12, fontWeight: "800" },
   error: {
     marginBottom: 12,
     padding: 12,

@@ -4,6 +4,8 @@ Este guia sobe a API Triade FIT, o PostgreSQL e o painel administrativo React. E
 
 ## Antes de subir
 
+A chave atual do Asaas deve ser revogada se já apareceu em arquivo versionável, captura de tela ou conversa. Ao cadastrar a nova chave em `.env.production`, use aspas simples, por exemplo `ASAAS_API_KEY='$aact_hmlg_...'`. O caractere `$` faz parte da chave; sem aspas simples o Docker Compose pode interpolá-lo e enviar um valor inválido ao container.
+
 1. Instale Docker Engine e Docker Compose Plugin no servidor.
 2. Aponte `api.triade-fit.com` para o IP do servidor.
 3. No servidor, copie `.env.production.example` para `.env.production` e preencha todos os segredos reais.
@@ -32,19 +34,19 @@ Na raiz do projeto, no servidor:
 ```bash
 cp .env.production.example .env.production
 nano .env.production
-docker compose -f docker-compose.production.yml up -d --build
-docker compose -f docker-compose.production.yml ps
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.production.yml ps
 curl http://127.0.0.1:3333/api/health
 ```
 
 O container aplica `prisma migrate deploy` automaticamente antes de iniciar a API. Ele **nao** executa `seed`, pois o seed atual remove todos os registros e so pode ser usado em uma base vazia de demonstracao.
 
-O container `triade-fit-admin` gera o React/Vite em modo producao e o entrega como site estatico. `VITE_API_URL` e incorporada no build; se essa URL mudar, execute `docker compose -f docker-compose.production.yml up -d --build admin` novamente.
+O container `triade-fit-admin` gera o React/Vite em modo producao e o entrega como site estatico. `VITE_API_URL` e incorporada no build; se essa URL mudar, execute `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build admin` novamente. O `--env-file .env.production` tambem e obrigatorio em todos os comandos Compose: `env_file` injeta variaveis no container, mas nao basta para interpolar `${...}` no proprio arquivo Compose.
 
 Na primeira subida de uma base vazia, crie o administrador definido em `ADMIN_EMAIL` e `ADMIN_PASSWORD`:
 
 ```bash
-docker compose -f docker-compose.production.yml exec api npm --workspace backend run admin:create
+docker compose --env-file .env.production -f docker-compose.production.yml exec api npm --workspace backend run admin:create
 ```
 
 Esse comando cria o administrador ou promove um usuario existente sem remover nem resetar dados. Execute-o somente depois de definir uma senha forte em `.env.production`.
@@ -85,9 +87,9 @@ Para uma base nova, use `admin:create`; nao execute o seed em uma base que ja te
 ## Operacao
 
 ```bash
-docker compose -f docker-compose.production.yml logs -f api
-docker compose -f docker-compose.production.yml restart api
-docker compose -f docker-compose.production.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.production.yml logs -f api
+docker compose --env-file .env.production -f docker-compose.production.yml restart api
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
 ```
 
-O PostgreSQL nao e exposto na internet. Para acessar pontualmente o banco, use `docker compose -f docker-compose.production.yml exec postgres psql -U triade -d triade_fit` dentro do servidor.
+O PostgreSQL nao e exposto na internet. Para acessar pontualmente o banco, use `docker compose --env-file .env.production -f docker-compose.production.yml exec postgres psql -U triade -d triade_fit` dentro do servidor.

@@ -6,7 +6,44 @@ const baseUrl = () =>
     ? "https://api.asaas.com/v3"
     : "https://api-sandbox.asaas.com/v3";
 
-const errorMessage = (body) => {
+const expectedKeyPrefix = () =>
+  env.ASAAS_ENV === "production" ? "$aact_prod_" : "$aact_hmlg_";
+
+const asaasApiKey = () => {
+  const key = env.ASAAS_API_KEY?.trim();
+  if (!key)
+    throw new AppError(
+      503,
+      "Pagamento ainda não está configurado. Configure a chave do Asaas no servidor.",
+    );
+  if (!key.startsWith(expectedKeyPrefix()))
+    throw new AppError(
+      503,
+      `A chave do Asaas não corresponde ao ambiente ${env.ASAAS_ENV}. Preserve o caractere $ no início da chave e confira ASAAS_ENV.`,
+    );
+  return key;
+};
+
+const errorCodes = (body) =>
+  body?.errors?.map((error) => error?.code).filter(Boolean) || [];
+
+const errorMessage = (body, status) => {
+  const codes = errorCodes(body);
+  if (codes.includes("invalid_environment"))
+    return "A chave do Asaas pertence a outro ambiente. Use uma chave Sandbox com ASAAS_ENV=sandbox.";
+  if (
+    status === 401 ||
+    codes.some((code) => [
+      "access_token_not_found",
+      "invalid_access_token_format",
+      "invalid_access_token",
+    ].includes(code))
+  )
+    return "O Asaas recusou a chave da API. Confira se ela está ativa, completa e se o caractere $ inicial foi preservado.";
+  if (status === 403)
+    return "O Asaas recusou esta operação para a conta configurada. Confira as permissões da chave da API.";
+  if (status === 429)
+    return "O Asaas recebeu muitas solicitações. Aguarde um instante e tente novamente.";
   const descriptions = body?.errors
     ?.map((error) => error?.description)
     .filter(Boolean);
@@ -15,7 +52,7 @@ const errorMessage = (body) => {
     : "O Asaas não conseguiu processar esta solicitação.";
 };
 
-const errorDetails = (message) => {
+const errorDetails = (message, body) => {
   const fieldErrors = {};
   const rules = [
     [/cpf|cnpj/i, "cpfCnpj"],
@@ -29,34 +66,52 @@ const errorDetails = (message) => {
   ];
   for (const [pattern, field] of rules)
     if (pattern.test(message)) fieldErrors[field] = [message];
-  return { fieldErrors, formErrors: [] };
+  return {
+    fieldErrors,
+    formErrors: [],
+    gateway: { provider: "asaas", codes: errorCodes(body) },
+  };
+};
+
+const gatewayFetch = async (url, options) => {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    throw new AppError(
+      503,
+      error?.name === "TimeoutError"
+        ? "O Asaas demorou para responder. Tente novamente em instantes."
+        : "Não foi possível conectar ao Asaas. Tente novamente em instantes.",
+    );
+  }
 };
 
 const asaasRequest = async (path, { method = "GET", body } = {}) => {
-  if (!env.ASAAS_API_KEY)
-    throw new AppError(
-      503,
-      "Pagamento ainda não está configurado. Configure a chave do Asaas no servidor.",
-    );
-  const response = await fetch(`${baseUrl()}${path}`, {
+  const apiKey = asaasApiKey();
+  const response = await gatewayFetch(`${baseUrl()}${path}`, {
     method,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
       "User-Agent": "Triade-FIT/1.0",
-      access_token: env.ASAAS_API_KEY,
+      access_token: apiKey,
     },
+    signal: AbortSignal.timeout(45000),
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = errorMessage(data);
+    const message = errorMessage(data, response.status);
     // Nunca registre o corpo enviado: pagamentos com cartão contêm dados sensíveis.
     console.error("Asaas API error", response.status, message);
     throw new AppError(
-      response.status === 400 || response.status === 404 ? 422 : 502,
+      [400, 404, 422].includes(response.status)
+        ? 422
+        : [401, 403, 429].includes(response.status)
+          ? 503
+          : 502,
       message,
-      errorDetails(message),
+      errorDetails(message, data),
     );
   }
   return data;
@@ -181,18 +236,15 @@ const checkoutReturnUrl = (state) => {
 };
 
 export async function createInitialPlanCheckout({ order, plan, paymentMethod }) {
-  if (!env.ASAAS_API_KEY)
-    throw new AppError(
-      503,
-      "Pagamento ainda não está configurado. Configure a chave do Asaas no servidor.",
-    );
-
-  const response = await fetch(`${baseUrl()}/checkouts`, {
+  const apiKey = asaasApiKey();
+  const response = await gatewayFetch(`${baseUrl()}/checkouts`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      access_token: env.ASAAS_API_KEY,
+      "User-Agent": "Triade-FIT/1.0",
+      access_token: apiKey,
     },
+    signal: AbortSignal.timeout(45000),
     body: JSON.stringify({
       billingTypes: [paymentMethod],
       chargeTypes:
