@@ -71,6 +71,7 @@ export const partnerCreditSchema = z.object({
   description: z.string().trim().min(3).max(300),
 });
 export const programSchema = z.object({
+  type: z.enum(["CONTENT", "TRAINING"]).optional(),
   title: z.string().trim().min(2).max(150),
   description: z.string().trim().min(2).max(5000),
   coverUrl: optionalUrl,
@@ -78,10 +79,11 @@ export const programSchema = z.object({
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("PUBLISHED"),
 });
 export const moduleSchema = z.object({
-  programId: z.uuid(),
+  programId: z.uuid().optional(),
   title: z.string().trim().min(2).max(150),
   description: z.string().trim().max(5000).nullable().optional(),
   coverUrl: optionalUrl,
+  unlockDelayDays: z.coerce.number().int().min(0).max(3650).default(0),
   sortOrder: z.coerce.number().int().min(0).optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("PUBLISHED"),
 });
@@ -91,7 +93,8 @@ const lessonMaterialUrl = z.url().refine(
 );
 
 export const lessonSchema = z.object({
-  moduleId: z.uuid(),
+  moduleId: z.uuid().optional(),
+  programId: z.uuid().optional(),
   title: z.string().trim().min(2).max(180),
   description: z.string().trim().max(5000).nullable().optional(),
   coverUrl: optionalUrl,
@@ -105,11 +108,11 @@ export const lessonSchema = z.object({
     .nullable()
     .optional(),
   category: z.string().trim().max(100).nullable().optional(),
-  kind: z.enum(["WORKOUT", "MEDITATION"]).default("WORKOUT"),
+  kind: z.enum(["CONTENT", "WORKOUT", "MEDITATION"]).default("CONTENT"),
+  isIntroductory: z.boolean().default(false),
   showMeditationButton: z.boolean().default(false),
   unlockDelayHours: z.coerce.number().int().min(0).max(8760).default(0),
   difficulty: z.string().trim().max(60).nullable().optional(),
-  calories: z.coerce.number().int().min(0).max(5000).nullable().optional(),
   sortOrder: z.coerce.number().int().min(0).optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("PUBLISHED"),
   materials: z
@@ -125,6 +128,13 @@ export const lessonSchema = z.object({
     .optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
 }).superRefine((data, context) => {
+  if (!data.moduleId && !data.programId) {
+    context.addIssue({
+      code: "custom",
+      path: ["moduleId"],
+      message: "Escolha o módulo ou o programa de treino desta aula.",
+    });
+  }
   if (
     data.kind === "MEDITATION" &&
     !data.showMeditationButton &&

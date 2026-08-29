@@ -41,7 +41,6 @@ export async function evolution(studentId) {
           select: {
             kind: true,
             durationMinutes: true,
-            calories: true,
           },
         },
       },
@@ -89,9 +88,6 @@ export async function evolution(studentId) {
         (total, item) => total + (item.lesson.durationMinutes || 0),
         0,
       ),
-      calories: sessions
-        .filter((item) => item.lesson.kind === "WORKOUT")
-        .reduce((total, item) => total + (item.lesson.calories || 0), 0),
     };
   });
   const weekSessions = completedSessions.filter(
@@ -146,10 +142,6 @@ export async function evolution(studentId) {
         (total, item) => total + (item.lesson.durationMinutes || 0),
         0,
       ),
-      calories: workoutSessions.reduce(
-        (total, item) => total + (item.lesson.calories || 0),
-        0,
-      ),
     },
     activity: {
       period: "LAST_7_DAYS",
@@ -158,10 +150,7 @@ export async function evolution(studentId) {
         (total, item) => total + (item.lesson.durationMinutes || 0),
         0,
       ),
-      calories: weekWorkouts.reduce(
-        (total, item) => total + (item.lesson.calories || 0),
-        0,
-      ),
+      activeDays: new Set(weekSessions.map((item) => dateKey(item.completedAt))).size,
       daily,
       achievements,
     },

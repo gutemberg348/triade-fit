@@ -19,7 +19,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import Svg, { Circle } from "react-native-svg";
 import api, { messageFrom } from "../services/api.js";
 import { Empty, ErrorBox, Loading, Screen } from "../components/UI.js";
-import { colors, radii, shadow } from "../theme/index.js";
+import { colors, fonts, radii, shadow } from "../theme/index.js";
 
 const fallbackCover = require("../../assets/essenza-cover.png");
 
@@ -194,11 +194,11 @@ const styles = StyleSheet.create({
   heading: { marginBottom: 20 },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   eyebrow: { color: colors.primaryLight, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
-  title: { marginTop: 7, color: colors.text, fontSize: 33, fontWeight: "900", letterSpacing: -1 },
+  title: { marginTop: 7, color: colors.text, fontFamily: fonts.displayBold, fontSize: 36, lineHeight: 43, letterSpacing: 0.1 },
   lead: { marginTop: 7, maxWidth: 330, color: colors.muted, fontSize: 14, lineHeight: 21 },
   quoteCard: { marginBottom: 18, padding: 16, flexDirection: "row", gap: 12, borderWidth: 1, borderColor: "rgba(245,179,141,.25)", borderRadius: radii.card, backgroundColor: "rgba(72,42,29,.32)" },
   quoteIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: "rgba(245,179,141,.12)" },
-  quoteTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  quoteTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
   quoteText: { marginTop: 5, color: colors.muted, fontSize: 11, lineHeight: 17 },
   card: { marginBottom: 15, overflow: "hidden", borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface, ...shadow },
   cover: { height: 170 },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   cardCopy: { padding: 16 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cardCategory: { color: colors.primaryLight, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  cardTitle: { marginTop: 6, color: colors.text, fontSize: 19, fontWeight: "900" },
+  cardTitle: { marginTop: 6, color: colors.text, fontFamily: fonts.display, fontSize: 22, lineHeight: 27 },
   cardText: { marginTop: 5, color: colors.muted, fontSize: 11, lineHeight: 17 },
   cardMeta: { marginTop: 13, flexDirection: "row", alignItems: "center", gap: 6 },
   cardMetaText: { color: colors.text, fontSize: 11, fontWeight: "800" },
@@ -218,11 +218,11 @@ const styles = StyleSheet.create({
   back: { alignSelf: "flex-start", width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   backText: { color: colors.text, fontSize: 37, lineHeight: 38 },
   sessionEyebrow: { marginTop: 12, color: colors.primaryLight, fontSize: 10, fontWeight: "900", letterSpacing: 1.8 },
-  sessionTitle: { marginTop: 8, color: colors.text, fontSize: 28, fontWeight: "900", textAlign: "center" },
+  sessionTitle: { marginTop: 8, color: colors.text, fontFamily: fonts.displayBold, fontSize: 31, lineHeight: 38, textAlign: "center" },
   sessionSubtitle: { marginTop: 6, color: colors.muted, fontSize: 13, textAlign: "center" },
   timerWrap: { width: 270, height: 270, marginTop: 34, alignItems: "center", justifyContent: "center" },
   timerCenter: { position: "absolute", alignItems: "center" },
-  timerText: { marginTop: 12, color: colors.text, fontSize: 42, fontWeight: "300", letterSpacing: 1 },
+  timerText: { marginTop: 12, color: colors.text, fontFamily: fonts.displayMedium, fontSize: 46, lineHeight: 54, letterSpacing: 1 },
   timerLabel: { marginTop: 5, color: colors.subtle, fontSize: 8, fontWeight: "900", letterSpacing: 1.2 },
   control: { width: 66, height: 66, marginTop: "auto", alignItems: "center", justifyContent: "center", borderRadius: 25, backgroundColor: colors.primaryLight, ...shadow },
   controlLabel: { marginTop: 9, color: colors.text, fontSize: 11, fontWeight: "800" },

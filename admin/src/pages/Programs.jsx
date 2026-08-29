@@ -1,108 +1,106 @@
 import { useMemo, useState } from "react";
-import {
-  Archive,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  Edit3,
-  FilePlus,
-  Layers3,
-  Leaf,
-  Link2,
-  LockKeyhole,
-  Plus,
-  Trash2,
-  Upload,
-  Video,
-} from "lucide-react";
+import { Archive, CalendarClock, Clock3, Dumbbell, Edit3, FilePlus, Layers3, Link2, Plus, Sparkles, Trash2, Upload, Video } from "lucide-react";
 import api, { errorMessage } from "../services/api.js";
 import { useApi } from "../hooks/useApi.js";
-import {
-  EmptyState,
-  ErrorState,
-  Loading,
-  Modal,
-  PageHeader,
-  StatusBadge,
-} from "../components/UI.jsx";
+import { EmptyState, ErrorState, Loading, Modal, PageHeader, StatusBadge } from "../components/UI.jsx";
 
 const defaults = {
-  program: { title: "", description: "", coverUrl: "", status: "PUBLISHED" },
-  module: {
-    programId: "",
-    title: "",
-    description: "",
-    coverUrl: "",
-    status: "PUBLISHED",
-  },
+  program: { type: "TRAINING", title: "", description: "", coverUrl: "", status: "PUBLISHED" },
+  module: { title: "", description: "", coverUrl: "", unlockDelayDays: 0, status: "PUBLISHED" },
   lesson: {
-    moduleId: "",
-    title: "",
-    description: "",
-    videoUrl: "",
-    coverUrl: "",
-    instructions: "",
-    durationMinutes: "",
-    category: "",
-    kind: "WORKOUT",
-    showMeditationButton: false,
-    unlockDelayHours: 0,
-    difficulty: "Iniciante",
-    calories: "",
-    status: "PUBLISHED",
-    materials: [],
-    notes: "",
+    moduleId: "", programId: "", title: "", description: "", videoUrl: "", coverUrl: "",
+    instructions: "", durationMinutes: "", category: "", kind: "CONTENT", isIntroductory: false,
+    showMeditationButton: false, unlockDelayHours: 0, difficulty: "Iniciante",
+    status: "PUBLISHED", materials: [], notes: "",
   },
 };
+
+const lessonLabel = (lesson) => lesson.kind === "MEDITATION" ? "Meditação" : lesson.kind === "WORKOUT" ? "Exercício" : "Conteúdo";
+
+const embeddedVideoUrl = (value) => {
+  try {
+    const url = new URL(value);
+    if (url.hostname.includes("youtu.be")) {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      if (id) return `https://www.youtube.com/embed/${id}?rel=0`;
+    }
+    if (url.hostname.includes("youtube.com")) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const id = url.pathname === "/watch" ? url.searchParams.get("v") : ["embed", "shorts", "live"].includes(parts[0]) ? parts[1] : null;
+      if (id) return `https://www.youtube.com/embed/${id}?rel=0`;
+    }
+    if (url.hostname.includes("vimeo.com")) {
+      const id = url.pathname.split("/").filter(Boolean).find((part) => /^\d+$/.test(part));
+      if (id) return `https://player.vimeo.com/video/${id}`;
+    }
+  } catch {}
+  return null;
+};
+
+function LessonVideoPreview({ value }) {
+  if (!value) return null;
+  const embedded = embeddedVideoUrl(value);
+  return (
+    <div className="lesson-video-preview">
+      {embedded
+        ? <iframe src={embedded} title="Prévia do vídeo" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        : <video src={value} controls preload="metadata">Seu navegador não conseguiu abrir este vídeo.</video>}
+      <div><Video /><span>Prévia da aula</span><a href={value} target="_blank" rel="noreferrer">Abrir original</a></div>
+    </div>
+  );
+}
+
 export default function Programs() {
-  const { data, loading, error, reload } = useApi("/admin/programs");
-  const [expanded, setExpanded] = useState({});
+  const { data = [], loading, error, reload } = useApi("/admin/programs");
+  const [section, setSection] = useState("CONTENT");
   const [editor, setEditor] = useState(null);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [uploadingMaterial, setUploadingMaterial] = useState(null);
   const [formError, setFormError] = useState("");
-  const title =
-    editor?.entity === "program"
-      ? "Programa"
-      : editor?.entity === "module"
-        ? "Módulo"
-        : "Capítulo";
+
+  const contentModules = useMemo(() => data
+    .filter((program) => program.type === "CONTENT")
+    .flatMap((program) => program.modules.map((module) => ({ ...module, programId: program.id }))), [data]);
+  const trainingPrograms = useMemo(() => data.filter((program) => program.type === "TRAINING"), [data]);
+
   const open = (entity, item = null, preset = {}) => {
-    setEditor({ entity, id: item?.id });
+    const context = preset.context || (section === "TRAINING" ? "TRAINING" : "CONTENT");
+    setEditor({ entity, id: item?.id, context });
     setForm({
       ...defaults[entity],
       ...item,
       ...preset,
+      context: undefined,
       coverUrl: item?.coverUrl || "",
       videoUrl: item?.videoUrl || "",
       materials: Array.isArray(item?.materials) ? item.materials : [],
     });
     setFormError("");
   };
+
   const submit = async (event) => {
     event.preventDefault();
     setSaving(true);
     setFormError("");
-    const path =
-      editor.entity === "program"
-        ? "/admin/programs"
-        : editor.entity === "module"
-          ? "/admin/modules"
-          : "/admin/lessons";
+    const path = editor.entity === "program" ? "/admin/programs" : editor.entity === "module" ? "/admin/modules" : "/admin/lessons";
     try {
+      const { modules, lessons, _count, progress, program, moduleTitle, context, ...values } = form;
       const payload = {
-        ...form,
-        durationMinutes: form.durationMinutes
-          ? Number(form.durationMinutes)
-          : null,
-        calories: form.calories ? Number(form.calories) : null,
-        unlockDelayHours: Number(form.unlockDelayHours || 0),
-        materials: Array.isArray(form.materials)
-          ? form.materials.filter((material) => material.title && material.url)
-          : [],
+        ...values,
+        ...(editor.entity === "program" ? { type: "TRAINING" } : {}),
+        ...(editor.entity === "lesson" ? {
+          moduleId: editor.context === "CONTENT" ? values.moduleId : undefined,
+          programId: editor.context === "TRAINING" ? values.programId : undefined,
+          kind: editor.context === "TRAINING" ? "WORKOUT" : values.kind,
+          isIntroductory: editor.context === "CONTENT" && Boolean(values.isIntroductory),
+          durationMinutes: values.durationMinutes ? Number(values.durationMinutes) : null,
+          unlockDelayHours: Number(values.unlockDelayHours || 0),
+          materials: Array.isArray(values.materials) ? values.materials.filter((material) => material.title && material.url) : [],
+        } : {}),
       };
       if (editor.id) await api.put(`${path}/${editor.id}`, payload);
       else await api.post(path, payload);
@@ -114,58 +112,37 @@ export default function Programs() {
       setSaving(false);
     }
   };
-  const uploadCover = async (file) => {
+
+  const upload = async (file, route, field, setUploading) => {
     if (!file) return;
-    setUploadingCover(true);
+    setUploading(true);
+    if (field === "videoUrl") setVideoUploadProgress(0);
     setFormError("");
     try {
       const body = new FormData();
-      body.append("image", file);
-      const { data } = await api.post("/uploads", body, {
+      body.append(field === "coverUrl" ? "image" : "video", file);
+      const { data: uploaded } = await api.post(route, body, {
         headers: { "Content-Type": "multipart/form-data" },
+        timeout: field === "videoUrl" ? 180000 : 30000,
+        onUploadProgress: field === "videoUrl" ? (event) => {
+          if (event.total) setVideoUploadProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+        } : undefined,
       });
-      setForm((current) => ({ ...current, coverUrl: data.url }));
+      setForm((current) => ({ ...current, [field]: uploaded.url }));
+      if (field === "videoUrl") setVideoUploadProgress(100);
     } catch (err) {
       setFormError(errorMessage(err));
     } finally {
-      setUploadingCover(false);
+      setUploading(false);
     }
   };
-  const uploadVideo = async (file) => {
-    if (!file) return;
-    setUploadingVideo(true);
-    setFormError("");
-    try {
-      const body = new FormData();
-      body.append("video", file);
-      const { data } = await api.post("/uploads/video", body, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setForm((current) => ({ ...current, videoUrl: data.url }));
-    } catch (err) {
-      setFormError(errorMessage(err));
-    } finally {
-      setUploadingVideo(false);
-    }
-  };
-  const changeMaterial = (index, field, value) => {
-    setForm((current) => ({
-      ...current,
-      materials: current.materials.map((material, materialIndex) =>
-        materialIndex === index ? { ...material, [field]: value } : material,
-      ),
-    }));
-  };
-  const addMaterial = () =>
-    setForm((current) => ({
-      ...current,
-      materials: [...(current.materials || []), { title: "", url: "", type: "LINK" }],
-    }));
-  const removeMaterial = (index) =>
-    setForm((current) => ({
-      ...current,
-      materials: current.materials.filter((_, materialIndex) => materialIndex !== index),
-    }));
+
+  const addMaterial = () => setForm((current) => ({ ...current, materials: [...(current.materials || []), { title: "", url: "", type: "LINK" }] }));
+  const changeMaterial = (index, field, value) => setForm((current) => ({
+    ...current,
+    materials: current.materials.map((material, materialIndex) => materialIndex === index ? { ...material, [field]: value } : material),
+  }));
+  const removeMaterial = (index) => setForm((current) => ({ ...current, materials: current.materials.filter((_, materialIndex) => materialIndex !== index) }));
   const uploadMaterialFile = async (file, index) => {
     if (!file) return;
     setUploadingMaterial(index);
@@ -173,21 +150,12 @@ export default function Programs() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const { data } = await api.post("/uploads/file", body, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data: uploaded } = await api.post("/uploads/file", body, { headers: { "Content-Type": "multipart/form-data" } });
       setForm((current) => ({
         ...current,
-        materials: current.materials.map((material, materialIndex) =>
-          materialIndex === index
-            ? {
-                ...material,
-                title: material.title || data.originalName,
-                url: data.url,
-                type: "FILE",
-              }
-            : material,
-        ),
+        materials: current.materials.map((material, materialIndex) => materialIndex === index
+          ? { ...material, title: material.title || uploaded.originalName, url: uploaded.url, type: "FILE" }
+          : material),
       }));
     } catch (err) {
       setFormError(errorMessage(err));
@@ -195,473 +163,146 @@ export default function Programs() {
       setUploadingMaterial(null);
     }
   };
+
   const archive = async (entity, id) => {
-    if (
-      !window.confirm(
-        "Arquivar este conteúdo? Ele deixará de aparecer para os alunos.",
-      )
-    )
-      return;
-    const path =
-      entity === "program"
-        ? "programs"
-        : entity === "module"
-          ? "modules"
-          : "lessons";
-    await api.delete(`/admin/${path}/${id}`);
-    reload();
+    if (!window.confirm("Arquivar este conteúdo? Ele deixará de aparecer para as alunas.")) return;
+    try {
+      const resource = entity === "program" ? "programs" : entity === "module" ? "modules" : "lessons";
+      await api.delete(`/admin/${resource}/${id}`);
+      await reload();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    }
   };
+
   if (loading) return <Loading label="Organizando seus conteúdos..." />;
   if (error) return <ErrorState message={error} retry={reload} />;
+  const items = section === "CONTENT" ? contentModules : trainingPrograms;
+  const title = editor?.entity === "program" ? "programa de treino" : editor?.entity === "module" ? "módulo" : "aula";
+
+  const renderLesson = (lesson, context, parentId) => (
+    <div className="lesson-admin" key={lesson.id}>
+      <span className="lesson-admin__icon">{lesson.kind === "MEDITATION" ? <Sparkles /> : lesson.kind === "WORKOUT" ? <Dumbbell /> : <Video />}</span>
+      <div>
+        <strong>{lesson.title}</strong>
+        <small><Clock3 /> {lesson.durationMinutes || "—"} min · {lessonLabel(lesson)}{lesson.isIntroductory ? " · Destaque da Home" : ""}</small>
+      </div>
+      <StatusBadge value={lesson.status} />
+      <div className="row-actions">
+        <button className="icon-button" onClick={() => open("lesson", lesson, context === "CONTENT" ? { moduleId: parentId, context } : { programId: parentId, context })} title="Editar aula"><Edit3 /></button>
+        <button className="icon-button danger" onClick={() => archive("lesson", lesson.id)} title="Arquivar aula"><Archive /></button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <PageHeader
-        eyebrow="CONTEÚDO E JORNADA"
-        title="Programas, módulos e capítulos"
-        description="Monte uma experiência de catálogo com capítulos progressivos e materiais extras."
-        action={
-          <button className="button primary" onClick={() => open("program")}>
-            <Plus /> Novo programa
-          </button>
-        }
+        eyebrow="CATÁLOGO DO APLICATIVO"
+        title={section === "CONTENT" ? "Módulos e aulas da Home" : "Programas de treino"}
+        description={section === "CONTENT"
+          ? "Cadastre o módulo com sua capa e, dentro dele, as aulas que a aluna verá como episódios."
+          : "Cadastre cada programa de treino e adicione as aulas e exercícios diretamente, sem módulos intermediários."}
+        action={<button className="button primary" onClick={() => open(section === "CONTENT" ? "module" : "program", null, { context: section })}><Plus /> {section === "CONTENT" ? "Novo módulo" : "Novo programa de treino"}</button>}
       />
-      {data.length ? (
-        <div className="program-list">
-          {data.map((program) => (
-            <article className="program-card" key={program.id}>
-              <header>
-                <button
-                  className="program-expand"
-                  onClick={() =>
-                    setExpanded({
-                      ...expanded,
-                      [program.id]: !expanded[program.id],
-                    })
-                  }
-                >
-                  {expanded[program.id] ? <ChevronDown /> : <ChevronRight />}
-                </button>
-                <div
-                  className="program-cover"
-                  style={{
-                    backgroundImage: program.coverUrl
-                      ? `url(${program.coverUrl})`
-                      : undefined,
-                  }}
-                >
-                  <Layers3 />
-                </div>
-                <div className="program-title">
-                  <div>
-                    <StatusBadge value={program.status} />
-                    <span>{program._count.enrollments} alunos</span>
+
+      <div className="content-tabs catalog-tabs" role="tablist">
+        <button className={section === "CONTENT" ? "is-active" : ""} onClick={() => setSection("CONTENT")}><Layers3 /> Módulos da Home</button>
+        <button className={section === "TRAINING" ? "is-active" : ""} onClick={() => setSection("TRAINING")}><Dumbbell /> Programas de treino</button>
+      </div>
+
+      {items.length ? (
+        <div className="program-list catalog-list">
+          {items.map((item) => {
+            const lessons = item.lessons || [];
+            const context = section;
+            const entity = context === "CONTENT" ? "module" : "program";
+            return (
+              <article className="program-card catalog-card" key={item.id}>
+                <header>
+                  <div className="program-cover" style={{ backgroundImage: item.coverUrl ? `url(${item.coverUrl})` : undefined }}>{context === "CONTENT" ? <Layers3 /> : <Dumbbell />}</div>
+                  <div className="program-title">
+                    <div><StatusBadge value={item.status} /><span>{lessons.length} aula{lessons.length === 1 ? "" : "s"}</span></div>
+                    <h3>{item.title}</h3>
+                    <p>{item.description || (context === "CONTENT" ? "Módulo da Home" : "Programa de treino")}</p>
+                    {context === "CONTENT" && Number(item.unlockDelayDays) > 0 && (
+                      <small className="catalog-release"><CalendarClock /> Libera {item.unlockDelayDays} dia{item.unlockDelayDays === 1 ? "" : "s"} após concluir o módulo anterior</small>
+                    )}
                   </div>
-                  <h3>{program.title}</h3>
-                  <p>{program.description}</p>
-                </div>
-                <div className="row-actions">
-                  <button
-                    className="icon-button"
-                    onClick={() => open("program", program)}
-                    title="Editar"
-                  >
-                    <Edit3 />
-                  </button>
-                  <button
-                    className="icon-button danger"
-                    onClick={() => archive("program", program.id)}
-                    title="Arquivar"
-                  >
-                    <Archive />
-                  </button>
-                </div>
-              </header>
-              {expanded[program.id] && (
-                <div className="modules-admin">
+                  <div className="row-actions">
+                    <button className="icon-button" onClick={() => open(entity, item, { context })} title="Editar"><Edit3 /></button>
+                    <button className="icon-button danger" onClick={() => archive(entity, item.id)} title="Arquivar"><Archive /></button>
+                  </div>
+                </header>
+                <div className="modules-admin catalog-lessons">
                   <div className="modules-admin__heading">
-                    <strong>Módulos</strong>
-                    <button
-                      className="button ghost"
-                      onClick={() =>
-                        open("module", null, { programId: program.id })
-                      }
-                    >
-                      <Plus /> Adicionar módulo
-                    </button>
+                    <strong>{context === "CONTENT" ? "Aulas do módulo" : "Aulas e exercícios"}</strong>
+                    <button className="button ghost" onClick={() => open("lesson", null, context === "CONTENT" ? { moduleId: item.id, kind: "CONTENT", context } : { programId: item.id, kind: "WORKOUT", context })}><Plus /> Adicionar aula</button>
                   </div>
-                  {program.modules.map((module) => (
-                    <section className="module-admin" key={module.id}>
-                      <header>
-                        <div>
-                          <small>
-                            MÓDULO{" "}
-                            {String(module.sortOrder + 1).padStart(2, "0")}
-                          </small>
-                          <h4>{module.title}</h4>
-                        </div>
-                        <StatusBadge value={module.status} />
-                        <div className="row-actions">
-                          <button
-                            className="icon-button"
-                            onClick={() => open("module", module)}
-                          >
-                            <Edit3 />
-                          </button>
-                          <button
-                            className="icon-button danger"
-                            onClick={() => archive("module", module.id)}
-                          >
-                            <Archive />
-                          </button>
-                        </div>
-                      </header>
-                      <div className="lesson-admin-list">
-                        {module.lessons.map((lesson) => (
-                          <div className="lesson-admin" key={lesson.id}>
-                            <span className="lesson-admin__icon">
-                              {lesson.kind === "MEDITATION" ? <Leaf /> : <Video />}
-                            </span>
-                            <div>
-                              <strong>{lesson.title}</strong>
-                              <small>
-                                <Clock3 /> {lesson.durationMinutes || "—"} min ·{" "}
-                                {lesson.kind === "MEDITATION" ? "Meditação" : lesson.category || "Treino"}
-                                {lesson.kind === "WORKOUT" && lesson.calories
-                                  ? ` · ${lesson.calories} kcal`
-                                  : ""}
-                                {lesson.kind === "MEDITATION"
-                                  ? ` · ${lesson.showMeditationButton ? "Prática guiada" : "Vídeo"}`
-                                  : ""}
-                                {lesson.difficulty ? ` · ${lesson.difficulty}` : ""}
-                                {lesson.unlockDelayHours
-                                  ? ` · libera ${lesson.unlockDelayHours}h após a anterior`
-                                  : ""}
-                                {lesson.materials?.length
-                                  ? ` · ${lesson.materials.length} material${lesson.materials.length > 1 ? "is" : ""}`
-                                  : ""}
-                              </small>
-                            </div>
-                            <StatusBadge value={lesson.status} />
-                            <div className="row-actions">
-                              <button
-                                className="icon-button"
-                                onClick={() => open("lesson", lesson)}
-                              >
-                                <Edit3 />
-                              </button>
-                              <button
-                                className="icon-button danger"
-                                onClick={() => archive("lesson", lesson.id)}
-                              >
-                                <Archive />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                        <button
-                          className="lesson-add"
-                          onClick={() =>
-                            open("lesson", null, { moduleId: module.id })
-                          }
-                        >
-                          <Plus /> Novo capítulo neste módulo
-                        </button>
-                      </div>
-                    </section>
-                  ))}
+                  <div className="lesson-admin-list">
+                    {lessons.map((lesson) => renderLesson(lesson, context, item.id))}
+                    {!lessons.length && <div className="materials-empty">Nenhuma aula cadastrada ainda.</div>}
+                  </div>
                 </div>
-              )}
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
-      ) : (
-        <EmptyState
-          title="Crie seu primeiro programa"
-          text="Organize módulos e capítulos em uma jornada de evolução."
-        />
-      )}
+      ) : <EmptyState title={section === "CONTENT" ? "Crie o primeiro módulo da Home" : "Crie o primeiro programa de treino"} text="Depois, adicione as aulas diretamente dentro dele." />}
+
       {editor && (
-        <Modal
-          title={`${editor.id ? "Editar" : "Novo"} ${title.toLowerCase()}`}
-          onClose={() => setEditor(null)}
-          wide
-        >
+        <Modal title={`${editor.id ? "Editar" : "Novo"} ${title}`} onClose={() => setEditor(null)} wide>
           <form className="form-grid" onSubmit={submit}>
             {formError && <div className="form-error full">{formError}</div>}
-            <label className="full">
-              <span>Título</span>
-              <input
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                required
-              />
-            </label>
-            <label className="full">
-              <span>Descrição</span>
-              <textarea
-                rows="3"
-                value={form.description || ""}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                required={editor.entity === "program"}
-              />
-            </label>
-            <label>
-              <span>Status</span>
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-              >
-                <option value="DRAFT">Rascunho</option>
-                <option value="PUBLISHED">Publicado</option>
-              </select>
-            </label>
+            <label className="full"><span>Nome</span><input value={form.title || ""} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+            <label className="full"><span>Descrição</span><textarea rows="3" value={form.description || ""} onChange={(event) => setForm({ ...form, description: event.target.value })} required={editor.entity === "program"} /></label>
+            <label><span>Status</span><select value={form.status || "PUBLISHED"} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="DRAFT">Rascunho</option><option value="PUBLISHED">Publicado</option></select></label>
+            {editor.entity === "module" && (
+              <label>
+                <span>Liberação após o módulo anterior (dias)</span>
+                <input type="number" min="0" max="3650" value={form.unlockDelayDays || 0} onChange={(event) => setForm({ ...form, unlockDelayDays: event.target.value })} />
+                <small className="muted">0 libera assim que o anterior terminar. Ex.: 7 libera uma semana depois.</small>
+              </label>
+            )}
+
             {editor.entity === "lesson" && (
               <>
-                <label>
-                  <span>Tipo do capítulo</span>
-                  <select
-                    value={form.kind || "WORKOUT"}
-                    onChange={(e) => {
-                      const kind = e.target.value;
-                      setForm({
-                        ...form,
-                        kind,
-                        calories: kind === "WORKOUT" ? form.calories : "",
-                        showMeditationButton:
-                          kind === "MEDITATION" ? true : false,
-                      });
-                    }}
-                  >
-                    <option value="WORKOUT">Treino</option>
-                    <option value="MEDITATION">Meditação</option>
-                  </select>
-                </label>
-                {form.kind === "MEDITATION" && (
-                  <label>
-                    <span>Como a aluna acessa</span>
-                    <select
-                      value={
-                        form.showMeditationButton
-                          ? "GUIDED_SESSION"
-                          : "VIDEO_ONLY"
-                      }
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          showMeditationButton:
-                            e.target.value === "GUIDED_SESSION",
-                        })
-                      }
-                    >
-                      <option value="GUIDED_SESSION">
-                        Botão para prática guiada
-                      </option>
-                      <option value="VIDEO_ONLY">Somente vídeo</option>
-                    </select>
-                    <small className="muted">
-                      {form.showMeditationButton
-                        ? "O botão abre o cronômetro; vídeo é opcional e pode ensinar a prática."
-                        : "A aluna vê somente o vídeo deste capítulo."}
-                    </small>
-                  </label>
-                )}
-                <label>
-                  <span>Duração (min)</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={form.durationMinutes || ""}
-                    onChange={(e) =>
-                      setForm({ ...form, durationMinutes: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Nível</span>
-                  <select
-                    value={form.difficulty || "Iniciante"}
-                    onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
-                  >
-                    <option value="Iniciante">Iniciante</option>
-                    <option value="Intermediário">Intermediário</option>
-                    <option value="Avançado">Avançado</option>
-                    <option value="Todos os níveis">Todos os níveis</option>
-                  </select>
-                </label>
-                {form.kind === "WORKOUT" && (
-                  <label>
-                    <span>Calorias estimadas (kcal)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.calories || ""}
-                      onChange={(e) => setForm({ ...form, calories: e.target.value })}
-                      placeholder="Ex.: 320"
-                    />
-                    <small className="muted">
-                      Ao concluir o treino, este valor entra automaticamente no progresso da aluna.
-                    </small>
-                  </label>
-                )}
-                <label>
-                  <span>Categoria</span>
-                  <input
-                    value={form.category || ""}
-                    onChange={(e) =>
-                      setForm({ ...form, category: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Link do vídeo (opcional)</span>
-                  <input
-                    type="url"
-                    value={form.videoUrl || ""}
-                    onChange={(e) =>
-                      setForm({ ...form, videoUrl: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Ou envie o vídeo</span>
-                  <input
-                    type="file"
-                    accept="video/mp4,video/webm,video/quicktime"
-                    onChange={(event) => uploadVideo(event.target.files?.[0])}
-                    disabled={uploadingVideo}
-                  />
-                  <small className="muted">
-                    <Upload /> {uploadingVideo ? "Enviando vídeo..." : "MP4, WebM ou MOV · até 150 MB"}
-                  </small>
-                </label>
-                <label className="full">
-                  <span>Orientações</span>
-                  <textarea
-                    rows="4"
-                    value={form.instructions || ""}
-                    onChange={(e) =>
-                      setForm({ ...form, instructions: e.target.value })
-                    }
-                  />
-                </label>
-                <label className="full lesson-release-field">
-                  <span><LockKeyhole /> Liberação após concluir o capítulo anterior</span>
-                  <div className="release-delay-control">
-                    <input
-                      type="number"
-                      min="0"
-                      max="8760"
-                      step="1"
-                      value={form.unlockDelayHours || 0}
-                      onChange={(e) =>
-                        setForm({ ...form, unlockDelayHours: e.target.value })
-                      }
-                    />
-                    <strong>horas</strong>
+                {editor.context === "CONTENT" && <label><span>Tipo de aula</span><select value={form.kind || "CONTENT"} onChange={(event) => setForm({ ...form, kind: event.target.value, showMeditationButton: event.target.value === "MEDITATION" })}><option value="CONTENT">Aula geral</option><option value="MEDITATION">Meditação</option><option value="WORKOUT">Aula com exercício</option></select></label>}
+                {editor.context === "CONTENT" && <label className="catalog-highlight-toggle"><input type="checkbox" checked={Boolean(form.isIntroductory)} onChange={(event) => setForm({ ...form, isIntroductory: event.target.checked })} /><span><strong>Mostrar nas aulas introdutórias</strong><small>Até 3 aulas podem aparecer no carrossel do topo da Home.</small></span></label>}
+                {form.kind === "MEDITATION" && <label><span>Acesso à meditação</span><select value={form.showMeditationButton ? "GUIDED" : "VIDEO"} onChange={(event) => setForm({ ...form, showMeditationButton: event.target.value === "GUIDED" })}><option value="GUIDED">Abrir prática guiada (vídeo opcional)</option><option value="VIDEO">Somente vídeo</option></select></label>}
+                <label><span>Duração (min)</span><input type="number" min="1" value={form.durationMinutes || ""} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} /></label>
+                <label><span>Nível</span><select value={form.difficulty || "Iniciante"} onChange={(event) => setForm({ ...form, difficulty: event.target.value })}><option>Iniciante</option><option>Intermediário</option><option>Avançado</option><option>Todos os níveis</option></select></label>
+                <label><span>Categoria</span><input value={form.category || ""} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder={editor.context === "TRAINING" ? "Ex.: Bíceps" : "Ex.: Introdução"} /></label>
+                <section className="full lesson-video-editor">
+                  <header><div><strong>Vídeo da aula</strong><small>Use um link do YouTube/Vimeo, um arquivo MP4 direto ou envie o vídeo.</small></div>{form.videoUrl && <button type="button" className="button ghost" onClick={() => setForm({ ...form, videoUrl: "" })}><Trash2 /> Remover vídeo</button>}</header>
+                  <div className="lesson-video-fields">
+                    <label><span>Link do vídeo</span><input type="url" value={form.videoUrl || ""} onChange={(event) => setForm({ ...form, videoUrl: event.target.value })} placeholder="https://youtube.com/... ou https://.../video.mp4" /><small className="muted"><Link2 /> YouTube, Vimeo ou link direto HTTPS</small></label>
+                    <label><span>Enviar arquivo</span><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => upload(event.target.files?.[0], "/uploads/video", "videoUrl", setUploadingVideo)} disabled={uploadingVideo} /><small className="muted"><Upload /> {uploadingVideo ? `Enviando vídeo... ${videoUploadProgress}%` : "MP4 recomendado · até 150 MB"}</small></label>
                   </div>
-                  <small className="muted">
-                    0 libera imediatamente · 24 libera em 1 dia · 168 libera em 7 dias. O primeiro capítulo fica sempre disponível.
-                  </small>
-                </label>
+                  {uploadingVideo && <div className="video-upload-progress"><span style={{ width: `${videoUploadProgress}%` }} /></div>}
+                  <LessonVideoPreview value={form.videoUrl} />
+                </section>
+                <label className="full"><span>Orientações</span><textarea rows="4" value={form.instructions || ""} onChange={(event) => setForm({ ...form, instructions: event.target.value })} /></label>
+                <label className="full"><span>Liberação após a aula anterior (horas)</span><input type="number" min="0" max="8760" value={form.unlockDelayHours || 0} onChange={(event) => setForm({ ...form, unlockDelayHours: event.target.value })} /><small className="muted">Use 0 para liberar imediatamente, 24 para um dia ou 168 para sete dias.</small></label>
                 <section className="full lesson-materials-editor">
-                  <header>
-                    <div>
-                      <strong>Arquivos e links do capítulo</strong>
-                      <small>PDF, documentos, planilhas, apresentações, ZIP ou links externos.</small>
-                    </div>
-                    <button type="button" className="button secondary" onClick={addMaterial}>
-                      <Plus /> Adicionar material
-                    </button>
-                  </header>
-                  {form.materials?.length ? (
-                    <div className="material-editor-list">
-                      {form.materials.map((material, index) => (
-                        <article className="material-editor-row" key={index}>
-                          <span className="material-editor-icon">
-                            {material.type === "FILE" ? <FilePlus /> : <Link2 />}
-                          </span>
-                          <div className="material-editor-fields">
-                            <input
-                              placeholder="Nome exibido para a aluna"
-                              value={material.title}
-                              onChange={(e) => changeMaterial(index, "title", e.target.value)}
-                            />
-                            <input
-                              type="url"
-                              placeholder="https://... ou faça upload"
-                              value={material.url}
-                              onChange={(e) => {
-                                changeMaterial(index, "url", e.target.value);
-                                changeMaterial(index, "type", "LINK");
-                              }}
-                            />
-                          </div>
-                          <label className="material-upload-button" title="Enviar arquivo">
-                            <Upload />
-                            <input
-                              type="file"
-                              accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"
-                              disabled={uploadingMaterial !== null}
-                              onChange={(e) => uploadMaterialFile(e.target.files?.[0], index)}
-                            />
-                          </label>
-                          <button type="button" className="icon-button danger" onClick={() => removeMaterial(index)} title="Remover material">
-                            <Trash2 />
-                          </button>
-                          {uploadingMaterial === index && <small className="material-uploading">Enviando arquivo...</small>}
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="materials-empty">Nenhum material adicional neste capítulo.</div>
-                  )}
+                  <header><div><strong>Arquivos e links da aula</strong><small>PDF, documento, planilha, ZIP ou link externo.</small></div><button type="button" className="button secondary" onClick={addMaterial}><Plus /> Adicionar material</button></header>
+                  {form.materials?.length ? <div className="material-editor-list">{form.materials.map((material, index) => (
+                    <article className="material-editor-row" key={index}>
+                      <span className="material-editor-icon">{material.type === "FILE" ? <FilePlus /> : <Link2 />}</span>
+                      <div className="material-editor-fields"><input placeholder="Nome do material" value={material.title} onChange={(event) => changeMaterial(index, "title", event.target.value)} /><input type="url" placeholder="https://... ou faça upload" value={material.url} onChange={(event) => { changeMaterial(index, "url", event.target.value); changeMaterial(index, "type", "LINK"); }} /></div>
+                      <label className="material-upload-button" title="Enviar arquivo"><Upload /><input type="file" accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" disabled={uploadingMaterial !== null} onChange={(event) => uploadMaterialFile(event.target.files?.[0], index)} /></label>
+                      <button type="button" className="icon-button danger" onClick={() => removeMaterial(index)}><Trash2 /></button>
+                      {uploadingMaterial === index && <small className="material-uploading">Enviando...</small>}
+                    </article>
+                  ))}</div> : <div className="materials-empty">Nenhum material adicional.</div>}
                 </section>
               </>
             )}
-            <label className="full">
-              <span>URL da capa</span>
-              <input
-                type="url"
-                value={form.coverUrl || ""}
-                onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
-                placeholder="https://..."
-              />
-            </label>
-            <label className="full">
-              <span>Ou envie a capa</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => uploadCover(event.target.files?.[0])}
-                disabled={uploadingCover}
-              />
-              <small className="muted">
-                <Upload /> {uploadingCover ? "Enviando imagem..." : "JPG, PNG ou WebP · até 8 MB"}
-              </small>
-            </label>
-            {form.coverUrl && (
-              <div className="full content-cover-preview">
-                <img src={form.coverUrl} alt="Prévia da capa" />
-                <span>Capa pronta para este {title.toLowerCase()}.</span>
-              </div>
-            )}
-            <div className="form-actions full">
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setEditor(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                className="button primary"
-                disabled={saving || uploadingCover || uploadingVideo || uploadingMaterial !== null}
-              >
-                {saving ? "Salvando..." : "Salvar conteúdo"}
-              </button>
-            </div>
+
+            <label className="full"><span>URL da capa</span><input type="url" value={form.coverUrl || ""} onChange={(event) => setForm({ ...form, coverUrl: event.target.value })} placeholder="https://..." /></label>
+            <label className="full"><span>Ou envie a capa</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => upload(event.target.files?.[0], "/uploads", "coverUrl", setUploadingCover)} disabled={uploadingCover} /><small className="muted"><Upload /> {uploadingCover ? "Enviando imagem..." : "JPG, PNG ou WebP · até 8 MB"}</small></label>
+            {form.coverUrl && <div className="full content-cover-preview"><img src={form.coverUrl} alt="Prévia da capa" /><span>Capa pronta.</span></div>}
+            <div className="form-actions full"><button type="button" className="button secondary" onClick={() => setEditor(null)}>Cancelar</button><button className="button primary" disabled={saving || uploadingCover || uploadingVideo || uploadingMaterial !== null}>{saving ? "Salvando..." : "Salvar"}</button></div>
           </form>
         </Modal>
       )}

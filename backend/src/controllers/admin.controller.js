@@ -14,13 +14,74 @@ import {
 } from "../services/measurement.service.js";
 import { activateReferralCredit } from "../services/commercial.service.js";
 
-const nextOrder = async (model, where = {}) => {
-  const last = await prisma[model].findFirst({
+const nextOrder = async (model, where = {}, client = prisma) => {
+  const last = await client[model].findFirst({
     where,
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
   return (last?.sortOrder ?? -1) + 1;
+};
+
+const ensureContentProgram = async (tx) => {
+  const existing = await tx.program.findFirst({
+    where: { type: "CONTENT", status: { not: "ARCHIVED" } },
+    orderBy: { sortOrder: "asc" },
+  });
+  if (existing) return existing;
+  const program = await tx.program.create({
+    data: {
+      type: "CONTENT",
+      title: "Conteúdos Triade FIT",
+      description: "Módulos e aulas exibidos na Home do aplicativo.",
+      coverUrl: "/brand/triade-fit-home.png",
+      status: "PUBLISHED",
+      sortOrder: await nextOrder("program", {}, tx),
+    },
+  });
+  await assignPublishedProgramToAllStudents(tx, program.id);
+  return program;
+};
+
+const ensureTrainingModule = async (tx, programId) => {
+  const existing = await tx.module.findFirst({
+    where: { programId, status: { not: "ARCHIVED" } },
+    orderBy: { sortOrder: "asc" },
+  });
+  if (existing) return existing;
+  return tx.module.create({
+    data: {
+      programId,
+      title: "Aulas",
+      description: "Aulas deste programa de treino.",
+      coverUrl: "/brand/triade-fit-focus.png",
+      status: "PUBLISHED",
+      sortOrder: 0,
+    },
+  });
+};
+
+const validateIntroductoryLesson = async (
+  tx,
+  { moduleId, isIntroductory, excludeLessonId },
+) => {
+  if (!isIntroductory) return;
+  const module = await tx.module.findUnique({
+    where: { id: moduleId },
+    select: { program: { select: { type: true } } },
+  });
+  if (module?.program.type !== "CONTENT")
+    throw new AppError(422, "Somente aulas dos módulos da Home podem ser introdutórias.");
+  const total = await tx.lesson.count({
+    where: {
+      module: { program: { type: "CONTENT" } },
+      isIntroductory: true,
+      status: { not: "ARCHIVED" },
+      ...(excludeLessonId ? { id: { not: excludeLessonId } } : {}),
+    },
+  });
+  if (total >= 3)
+    throw new AppError(422, "A Home aceita no máximo 3 aulas introdutórias.");
 };
 
 const assignPublishedProgramToAllStudents = async (tx, programId) => {
@@ -425,18 +486,35 @@ export const listPrograms = async (req, res) => {
       },
     });
   const baseUrl = requestBaseUrl(req);
-  res.json(programs.map((program) => contentAssets(program, baseUrl)));
+  res.json(
+    programs.map((program) => {
+      const serialized = contentAssets(program, baseUrl);
+      return {
+        ...serialized,
+        lessons: serialized.modules.flatMap((module) =>
+          module.lessons.map((lesson) => ({
+            ...lesson,
+            moduleId: module.id,
+            moduleTitle: module.title,
+            programId: program.id,
+          })),
+        ),
+      };
+    }),
+  );
 };
 
 export const createProgram = async (req, res) => {
   const input = contentAssetInput(req.body, requestBaseUrl(req));
   const data = {
     ...input,
+    type: input.type || "TRAINING",
     coverUrl: input.coverUrl || "/brand/triade-fit-home.png",
     sortOrder: req.body.sortOrder ?? (await nextOrder("program")),
   };
   const program = await prisma.$transaction(async (tx) => {
     const created = await tx.program.create({ data });
+    if (created.type === "TRAINING") await ensureTrainingModule(tx, created.id);
     if (created.status === "PUBLISHED")
       await assignPublishedProgramToAllStudents(tx, created.id);
     return created;
@@ -465,19 +543,30 @@ export const archiveProgram = async (req, res) =>
   );
 export const createModule = async (req, res) => {
   const input = contentAssetInput(req.body, requestBaseUrl(req));
-  const sortOrder =
-    req.body.sortOrder ??
-    (await nextOrder("module", { programId: req.body.programId }));
-  const data = {
-    ...input,
-    coverUrl:
-      input.coverUrl ||
-      (sortOrder % 2 === 0
-        ? "/brand/triade-fit-focus.png"
-        : "/brand/triade-fit-balance.png"),
-    sortOrder,
-  };
-  res.status(201).json(await prisma.module.create({ data }));
+  const module = await prisma.$transaction(async (tx) => {
+    const program = input.programId
+      ? await tx.program.findUnique({ where: { id: input.programId } })
+      : await ensureContentProgram(tx);
+    if (!program) throw new AppError(404, "Programa não encontrado.");
+    if (program.type !== "CONTENT")
+      throw new AppError(422, "Módulos visíveis pertencem somente ao conteúdo da Home.");
+    const sortOrder =
+      req.body.sortOrder ??
+      (await nextOrder("module", { programId: program.id }, tx));
+    return tx.module.create({
+      data: {
+        ...input,
+        programId: program.id,
+        coverUrl:
+          input.coverUrl ||
+          (sortOrder % 2 === 0
+            ? "/brand/triade-fit-focus.png"
+            : "/brand/triade-fit-balance.png"),
+        sortOrder,
+      },
+    });
+  });
+  res.status(201).json(module);
 };
 export const updateModule = async (req, res) =>
   res.json(
@@ -495,26 +584,64 @@ export const archiveModule = async (req, res) =>
   );
 export const createLesson = async (req, res) => {
   const input = contentAssetInput(req.body, requestBaseUrl(req));
-  const data = {
-    ...input,
-    coverUrl:
-      input.coverUrl ||
-      (input.kind === "MEDITATION"
-        ? "/brand/triade-fit-balance.png"
-        : "/brand/triade-fit-focus.png"),
-    sortOrder:
+  const lesson = await prisma.$transaction(async (tx) => {
+    const { programId, ...lessonInput } = input;
+    let moduleId = lessonInput.moduleId;
+    if (programId) {
+      const program = await tx.program.findUnique({ where: { id: programId } });
+      if (!program || program.type !== "TRAINING")
+        throw new AppError(422, "Escolha um programa de treino válido.");
+      moduleId = (await ensureTrainingModule(tx, program.id)).id;
+    }
+    if (!moduleId) throw new AppError(422, "Escolha onde esta aula será publicada.");
+    await validateIntroductoryLesson(tx, {
+      moduleId,
+      isIntroductory: lessonInput.isIntroductory,
+    });
+    const sortOrder =
       req.body.sortOrder ??
-      (await nextOrder("lesson", { moduleId: req.body.moduleId })),
-  };
-  res.status(201).json(await prisma.lesson.create({ data }));
+      (await nextOrder("lesson", { moduleId }, tx));
+    return tx.lesson.create({
+      data: {
+        ...lessonInput,
+        moduleId,
+        coverUrl:
+          lessonInput.coverUrl ||
+          (lessonInput.kind === "MEDITATION"
+            ? "/brand/triade-fit-balance.png"
+            : "/brand/triade-fit-focus.png"),
+        sortOrder,
+      },
+    });
+  });
+  res.status(201).json(lesson);
 };
-export const updateLesson = async (req, res) =>
-  res.json(
-    await prisma.lesson.update({
-      where: { id: req.params.id },
-      data: contentAssetInput(req.body, requestBaseUrl(req)),
-    }),
-  );
+export const updateLesson = async (req, res) => {
+  const input = contentAssetInput(req.body, requestBaseUrl(req));
+  const lesson = await prisma.$transaction(async (tx) => {
+    const { programId, ...lessonInput } = input;
+    let moduleId = lessonInput.moduleId;
+    if (programId) {
+      const program = await tx.program.findUnique({ where: { id: programId } });
+      if (!program || program.type !== "TRAINING")
+        throw new AppError(422, "Escolha um programa de treino válido.");
+      moduleId = (await ensureTrainingModule(tx, program.id)).id;
+    }
+    const current = await tx.lesson.findUnique({ where: { id: req.params.id } });
+    if (!current) throw new AppError(404, "Aula não encontrada.");
+    moduleId ||= current.moduleId;
+    await validateIntroductoryLesson(tx, {
+      moduleId,
+      isIntroductory: lessonInput.isIntroductory,
+      excludeLessonId: current.id,
+    });
+    return tx.lesson.update({
+      where: { id: current.id },
+      data: { ...lessonInput, moduleId },
+    });
+  });
+  res.json(lesson);
+};
 export const archiveLesson = async (req, res) =>
   res.json(
     await prisma.lesson.update({

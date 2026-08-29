@@ -5,6 +5,7 @@ import request from "supertest";
 import { validate } from "../src/middlewares/validate.js";
 import { errorHandler } from "../src/middlewares/errorHandler.js";
 import { studentCreateSchema } from "../src/validators/admin.validators.js";
+import { measurementSchema } from "../src/validators/measurement.validators.js";
 
 test("API devolve mensagens claras e separadas por campo", async () => {
   const app = express();
@@ -32,4 +33,17 @@ test("API devolve mensagens claras e separadas por campo", async () => {
     "Informe pelo menos 8 caracteres.",
   );
   assert.doesNotMatch(JSON.stringify(response.body), /Invalid email|Too small/);
+});
+
+test("avaliação corporal exige pelo menos uma medida real", () => {
+  const empty = measurementSchema.safeParse({ measuredAt: "2026-08-28" });
+  assert.equal(empty.success, false);
+  assert.match(empty.error.issues[0].message, /pelo menos uma medida/);
+
+  const valid = measurementSchema.safeParse({
+    measuredAt: "2026-08-28",
+    waistCm: "82.5",
+  });
+  assert.equal(valid.success, true);
+  assert.equal(valid.data.waistCm, 82.5);
 });

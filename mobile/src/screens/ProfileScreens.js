@@ -22,7 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import api, { messageFrom } from "../services/api.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { Button, Screen } from "../components/UI.js";
-import { colors, radii, shadow } from "../theme/index.js";
+import { colors, fonts, radii, shadow } from "../theme/index.js";
 
 export function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
@@ -270,9 +270,10 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 5,
     color: colors.text,
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: -0.8,
+    fontFamily: fonts.displayBold,
+    fontSize: 36,
+    lineHeight: 43,
+    letterSpacing: 0.1,
   },
   profileCard: {
     padding: 23,
@@ -297,8 +298,9 @@ const styles = StyleSheet.create({
   name: {
     marginTop: 14,
     color: colors.text,
-    fontSize: 22,
-    fontWeight: "900",
+    fontFamily: fonts.displayBold,
+    fontSize: 25,
+    lineHeight: 31,
   },
   email: { marginTop: 4, color: colors.text, fontSize: 12, fontWeight: "700" },
   badge: {
@@ -329,9 +331,9 @@ const styles = StyleSheet.create({
   settingIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(232,136,91,.34)", borderRadius: 13, backgroundColor: "rgba(158,63,34,.24)" },
   settingIconDanger: { borderColor: "rgba(245,142,134,.34)", backgroundColor: "rgba(245,142,134,.1)" },
   settingChevron: { width: 28, height: 28, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface2 },
-  settingText: { flex: 1, color: colors.text, fontSize: 14, fontWeight: "800" },
-  settingTextDanger: { flex: 1, color: colors.danger, fontSize: 14, fontWeight: "900" },
-  avatarInitial: { color: colors.text, fontSize: 28, fontWeight: "900" },
+  settingText: { flex: 1, color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
+  settingTextDanger: { flex: 1, color: colors.danger, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
+  avatarInitial: { color: colors.text, fontFamily: fonts.displayBold, fontSize: 30, lineHeight: 36 },
   avatarEdit: { width: 98, height: 98, alignSelf: "center", marginBottom: 25 },
   avatarImage: {
     width: 98,

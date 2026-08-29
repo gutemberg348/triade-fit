@@ -25,8 +25,14 @@ enum PublishStatus {
 }
 
 enum LessonKind {
+  CONTENT
   WORKOUT
   MEDITATION
+}
+
+enum ProgramType {
+  CONTENT
+  TRAINING
 }
 
 enum EnrollmentStatus {
@@ -233,6 +239,7 @@ model Program {
   title       String
   description String
   coverUrl    String?
+  type        ProgramType      @default(CONTENT)
   sortOrder   Int              @default(0)
   status      PublishStatus    @default(DRAFT)
   createdAt   DateTime         @default(now())
@@ -241,20 +248,22 @@ model Program {
   enrollments StudentProgram[]
 
   @@index([status, sortOrder])
+  @@index([type, status, sortOrder])
 }
 
 model Module {
-  id          String        @id @default(uuid()) @db.Uuid
-  programId   String        @db.Uuid
-  title       String
-  description String?
-  coverUrl    String?
-  sortOrder   Int           @default(0)
-  status      PublishStatus @default(DRAFT)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  program     Program       @relation(fields: [programId], references: [id], onDelete: Cascade)
-  lessons     Lesson[]
+  id              String        @id @default(uuid()) @db.Uuid
+  programId       String        @db.Uuid
+  title           String
+  description     String?
+  coverUrl        String?
+  unlockDelayDays Int           @default(0)
+  sortOrder       Int           @default(0)
+  status          PublishStatus @default(DRAFT)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  program         Program       @relation(fields: [programId], references: [id], onDelete: Cascade)
+  lessons         Lesson[]
 
   @@unique([programId, sortOrder])
   @@index([programId, status])
@@ -271,10 +280,10 @@ model Lesson {
   durationMinutes      Int?
   category             String?
   kind                 LessonKind       @default(WORKOUT)
+  isIntroductory       Boolean          @default(false)
   showMeditationButton Boolean          @default(false)
   unlockDelayHours     Int              @default(0)
   difficulty           String?
-  calories             Int?
   sortOrder            Int              @default(0)
   status               PublishStatus    @default(DRAFT)
   materials            Json?
@@ -286,6 +295,7 @@ model Lesson {
 
   @@unique([moduleId, sortOrder])
   @@index([moduleId, status])
+  @@index([isIntroductory, status, sortOrder])
 }
 
 model CommunityPost {

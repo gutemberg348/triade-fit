@@ -25,6 +25,17 @@ export const colors = {
 
 export const radii = { sm: 12, input: 16, card: 22, hero: 28, pill: 999 };
 
+export const fonts = {
+  body: "Inter_400Regular",
+  medium: "Inter_500Medium",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extraBold: "Inter_800ExtraBold",
+  displayMedium: "Oswald_500Medium",
+  display: "Oswald_600SemiBold",
+  displayBold: "Oswald_700Bold",
+};
+
 export const shadow = {
   shadowColor: "#000000",
   shadowOffset: { width: 0, height: 12 },

@@ -2,6 +2,7 @@ import { prisma } from "../config/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import {
   requireEnrolledLesson,
+  withContentModulesAvailability,
   withProgramProgress,
 } from "../services/progress.service.js";
 import {
@@ -29,9 +30,137 @@ const programInclude = (studentId) => ({
   },
 });
 
+const flattenProgramLessons = (program) => ({
+  ...program,
+  lessons: program.modules.flatMap((module) =>
+    module.lessons.map((lesson) => ({
+      ...lesson,
+      moduleId: module.id,
+      moduleTitle: module.title,
+    })),
+  ),
+});
+
+const contentModuleInclude = (studentId) => ({
+  program: { select: { id: true, title: true, type: true } },
+  lessons: {
+    where: { status: "PUBLISHED" },
+    orderBy: { sortOrder: "asc" },
+    include: {
+      progress: {
+        where: { studentId },
+        select: { completed: true, completedAt: true, lastViewedAt: true },
+      },
+    },
+  },
+});
+
+export const listHomeContent = async (req, res) => {
+  const modules = await prisma.module.findMany({
+    where: {
+      status: "PUBLISHED",
+      program: {
+        type: "CONTENT",
+        status: "PUBLISHED",
+        enrollments: {
+          some: { studentId: req.user.studentId, status: "ACTIVE" },
+        },
+      },
+    },
+    orderBy: [{ program: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+    include: contentModuleInclude(req.user.studentId),
+  });
+  const enriched = withContentModulesAvailability(modules);
+  const allLessons = enriched.flatMap((module) =>
+    module.availability.isLocked
+      ? []
+      : module.lessons.map((lesson) => ({
+          ...lesson,
+          moduleId: module.id,
+          moduleTitle: module.title,
+        })),
+  );
+  const selected = allLessons.filter((lesson) => lesson.isIntroductory).slice(0, 3);
+  const introLessons = selected.length ? selected : allLessons.slice(0, 3);
+  const baseUrl = requestBaseUrl(req);
+  res.json({
+    introLessons: introLessons.map((lesson) => singleLessonAssets(lesson, baseUrl)),
+    modules: enriched.map((module) => contentAssets(module, baseUrl)),
+  });
+};
+
+export const getContentModule = async (req, res) => {
+  const modules = await prisma.module.findMany({
+    where: {
+      status: "PUBLISHED",
+      program: {
+        type: "CONTENT",
+        status: "PUBLISHED",
+        enrollments: {
+          some: { studentId: req.user.studentId, status: "ACTIVE" },
+        },
+      },
+    },
+    orderBy: [{ program: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+    include: contentModuleInclude(req.user.studentId),
+  });
+  const module = withContentModulesAvailability(modules).find(
+    (item) => item.id === req.params.id,
+  );
+  if (!module) throw new AppError(404, "Módulo não encontrado.");
+  if (module.availability.isLocked)
+    throw new AppError(403, module.availability.reason, {
+      unlocksAt: module.availability.unlocksAt,
+    });
+  res.json(contentAssets(module, requestBaseUrl(req)));
+};
+
+export const listTrainingPrograms = async (req, res) => {
+  const programs = await prisma.program.findMany({
+    where: {
+      type: "TRAINING",
+      status: "PUBLISHED",
+      enrollments: {
+        some: { studentId: req.user.studentId, status: "ACTIVE" },
+      },
+    },
+    orderBy: { sortOrder: "asc" },
+    include: programInclude(req.user.studentId),
+  });
+  const baseUrl = requestBaseUrl(req);
+  res.json(
+    programs
+      .map(withProgramProgress)
+      .map(flattenProgramLessons)
+      .map((program) => contentAssets(program, baseUrl)),
+  );
+};
+
+export const getTrainingProgram = async (req, res) => {
+  const program = await prisma.program.findFirst({
+    where: {
+      id: req.params.id,
+      type: "TRAINING",
+      status: "PUBLISHED",
+      enrollments: {
+        some: { studentId: req.user.studentId, status: "ACTIVE" },
+      },
+    },
+    include: programInclude(req.user.studentId),
+  });
+  if (!program) throw new AppError(404, "Programa de treino não encontrado.");
+  res.json(
+    contentAssets(
+      flattenProgramLessons(withProgramProgress(program)),
+      requestBaseUrl(req),
+    ),
+  );
+};
+
 export const listPrograms = async (req, res) => {
   const programs = await prisma.program.findMany({
     where: {
+      type: "CONTENT",
       status: "PUBLISHED",
       enrollments: {
         some: { studentId: req.user.studentId, status: "ACTIVE" },
@@ -78,6 +207,7 @@ export const getProgram = async (req, res) => {
   const program = await prisma.program.findFirst({
     where: {
       id: req.params.id,
+      type: "CONTENT",
       status: "PUBLISHED",
       enrollments: {
         some: { studentId: req.user.studentId, status: "ACTIVE" },
@@ -157,11 +287,5 @@ export const completeLesson = async (req, res) => {
       completedAt,
     },
   });
-  res.json({
-    ...progress,
-    caloriesAdded:
-      completed && !previousProgress?.completed && lesson.kind === "WORKOUT"
-        ? lesson.calories || 0
-        : 0,
-  });
+  res.json(progress);
 };

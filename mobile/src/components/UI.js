@@ -7,8 +7,8 @@ import {
   View,
 } from "react-native";
 import { ArrowLeft, Check, Leaf, Play } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { colors, radii } from "../theme/index.js";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { colors, fonts, radii } from "../theme/index.js";
 
 export function Brand({ mini = false }) {
   return (
@@ -26,7 +26,8 @@ export function Brand({ mini = false }) {
   );
 }
 
-export function Screen({ children, scroll = true, style, header, onBack }) {
+export function Screen({ children, scroll = true, style, header, onBack, headerRight }) {
+  const insets = useSafeAreaInsets();
   const content = (
     <>
       {(header || onBack) && (
@@ -39,6 +40,7 @@ export function Screen({ children, scroll = true, style, header, onBack }) {
           <Text numberOfLines={1} style={styles.screenTitle}>
             {header}
           </Text>
+          {headerRight}
         </View>
       )}
       {children}
@@ -48,7 +50,10 @@ export function Screen({ children, scroll = true, style, header, onBack }) {
     <SafeAreaView style={[styles.safe, style]} edges={["top"]}>
       {scroll ? (
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: 118 + Math.max(insets.bottom, 0) },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets
@@ -172,7 +177,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   markMini: { width: 38, height: 38, borderRadius: 13 },
-  brandName: { color: colors.text, fontSize: 17, fontWeight: "900", letterSpacing: 2.1 },
+  brandName: { color: colors.text, fontFamily: fonts.displayBold, fontSize: 18, letterSpacing: 2.1 },
   brandNameMini: { fontSize: 14, letterSpacing: 1.7 },
   brandSmall: { marginTop: 1, color: colors.subtle, fontSize: 7, fontWeight: "800", letterSpacing: 1.7 },
   screenHeader: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
@@ -186,7 +191,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: colors.surface,
   },
-  screenTitle: { flex: 1, color: colors.text, fontSize: 23, fontWeight: "800", letterSpacing: -0.4 },
+  screenTitle: { flex: 1, color: colors.text, fontFamily: fonts.display, fontSize: 26, lineHeight: 32, letterSpacing: 0.15 },
   button: {
     minHeight: 54,
     paddingHorizontal: 19,
@@ -211,7 +216,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, minHeight: 300, alignItems: "center", justifyContent: "center", gap: 14 },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: "center" },
   error: { minHeight: 300, alignItems: "center", justifyContent: "center", gap: 14, padding: 25 },
-  errorTitle: { color: colors.text, fontSize: 21, fontWeight: "800" },
+  errorTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 23, lineHeight: 29 },
   empty: { padding: 28, borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.card, alignItems: "center", gap: 8, backgroundColor: colors.surface },
-  emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "800" },
+  emptyTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 21, lineHeight: 26 },
 });

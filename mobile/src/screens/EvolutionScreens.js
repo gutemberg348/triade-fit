@@ -7,9 +7,9 @@ import {
   Camera,
   ChevronRight,
   CirclePlus,
+  ClipboardList,
   Droplets,
   Dumbbell,
-  Flame,
   ImagePlus,
   Clock3,
   Medal,
@@ -18,13 +18,14 @@ import {
   Target,
   Trophy,
   TrendingUp,
+  X,
 } from "lucide-react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import Svg, { Circle, Defs, Line, LinearGradient as SvgGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 import api, { messageFrom } from "../services/api.js";
 import { Button, Empty, ErrorBox, Loading, Screen } from "../components/UI.js";
-import { colors, radii } from "../theme/index.js";
+import { colors, fonts, radii } from "../theme/index.js";
 
 const options = [
   { key: "weightKg", label: "Peso", short: "Peso", unit: "kg", Icon: Scale },
@@ -219,18 +220,47 @@ export function EvolutionScreen({ navigation }) {
   if (state.loading) return <Screen><Loading label="Atualizando seus indicadores..." /></Screen>;
   if (state.error && !state.evolution) return <Screen><ErrorBox message={state.error} retry={load} /></Screen>;
 
+  if (!state.evolution.measurements?.length) {
+    return (
+      <Screen>
+        <View style={styles.heading}>
+          <Text style={styles.eyebrow}>ACOMPANHAMENTO</Text>
+          <Text style={styles.title}>Meu progresso</Text>
+          <Text style={styles.lead}>Para acompanhar sua evolução, precisamos primeiro registrar seu ponto de partida.</Text>
+        </View>
+        <View style={styles.initialMeasurementCard}>
+          <View style={styles.initialMeasurementIcon}><ClipboardList size={29} color={colors.text} /></View>
+          <Text style={styles.initialMeasurementEyebrow}>PRIMEIRO PASSO</Text>
+          <Text style={styles.initialMeasurementTitle}>Cadastre suas medidas iniciais</Text>
+          <Text style={styles.initialMeasurementText}>Esse primeiro registro será a base das comparações, gráficos e resultados futuros. Você pode preencher apenas as medidas que deseja acompanhar.</Text>
+          <View style={styles.initialMeasurementBenefits}>
+            {["Cria seu ponto de partida", "Libera gráficos de comparação", "Mantém todo o histórico organizado"].map((label) => (
+              <View style={styles.initialMeasurementBenefit} key={label}><View style={styles.initialMeasurementDot} /><Text style={styles.initialMeasurementBenefitText}>{label}</Text></View>
+            ))}
+          </View>
+          <View style={styles.initialMeasurementActions}>
+            <Button title="Adicionar agora" icon={CirclePlus} onPress={() => navigation.navigate("AddMeasurement", { initial: true })} />
+            <Pressable style={styles.skipMeasurement} onPress={() => navigation.navigate("Início")}>
+              <Text style={styles.skipMeasurementText}>Agora não</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
   const comparison = state.evolution.comparison[selected.key];
   const activity = state.evolution.activity || {
     workouts: 0,
     minutes: 0,
-    calories: 0,
+    activeDays: 0,
     daily: [],
     achievements: [],
   };
   const totals = state.evolution.totals || {
     workouts: 0,
+    sessions: 0,
     minutes: 0,
-    calories: 0,
     activeDays: 0,
   };
   const decreaseIsPositive = ["weightKg", "waistCm", "bodyFatPercent"].includes(selected.key);
@@ -242,25 +272,33 @@ export function EvolutionScreen({ navigation }) {
   return (
     <Screen>
       <View style={styles.heading}>
-        <Text style={styles.eyebrow}>ACOMPANHAMENTO</Text>
-        <Text style={styles.title}>Meu progresso</Text>
+        <View style={styles.headingTop}>
+          <View style={styles.headingCopy}>
+            <Text style={styles.eyebrow}>ACOMPANHAMENTO</Text>
+            <Text style={styles.title}>Meu progresso</Text>
+          </View>
+          <Pressable style={styles.quickMeasure} onPress={() => navigation.navigate("AddMeasurement")}>
+            <CirclePlus size={18} color={colors.ink} strokeWidth={2.6} />
+            <Text style={styles.quickMeasureText}>Nova medida</Text>
+          </Pressable>
+        </View>
         <Text style={styles.lead}>Transforme seus registros em decisões mais conscientes sobre sua jornada.</Text>
       </View>
 
       <View style={styles.lifetimeCard}>
         <View style={styles.lifetimeTop}>
-          <View style={styles.lifetimeIcon}><Flame size={24} color={colors.accent} strokeWidth={2.35} /></View>
+          <View style={styles.lifetimeIcon}><Trophy size={24} color={colors.accent} strokeWidth={2.35} /></View>
           <View style={styles.lifetimeCopy}>
-            <Text style={styles.lifetimeEyebrow}>DESDE O PRIMEIRO TREINO</Text>
-            <Text style={styles.lifetimeTitle}>Calorias acumuladas</Text>
+            <Text style={styles.lifetimeEyebrow}>SUA JORNADA</Text>
+            <Text style={styles.lifetimeTitle}>Consistência acumulada</Text>
           </View>
           <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>ATIVO</Text></View>
         </View>
         <View style={styles.lifetimeNumberRow}>
-          <Text style={styles.lifetimeNumber}>{formatNumber(totals.calories)}</Text>
-          <Text style={styles.lifetimeUnit}>kcal</Text>
+          <Text style={styles.lifetimeNumber}>{formatNumber(totals.sessions)}</Text>
+          <Text style={styles.lifetimeUnit}>aulas</Text>
         </View>
-        <Text style={styles.lifetimeDescription}>O total cresce uma única vez a cada aula de exercício concluída.</Text>
+        <Text style={styles.lifetimeDescription}>Cada aula concluída registra mais um passo real na sua evolução.</Text>
         <View style={styles.lifetimeStats}>
           {[
             [Dumbbell, formatNumber(totals.workouts), "treinos"],
@@ -276,41 +314,13 @@ export function EvolutionScreen({ navigation }) {
         </View>
       </View>
 
-      <View style={styles.statsRow}>
-        {[
-          [Dumbbell, "Treinos", activity.workouts],
-          [Clock3, "Minutos", activity.minutes],
-          [Flame, "Calorias", activity.calories],
-        ].map(([Icon, label, value]) => (
-          <View style={styles.statCard} key={label}>
-            <View style={styles.statIcon}><Icon size={17} color={colors.primaryLight} /></View>
-            <Text style={styles.statValue}>{formatNumber(value)}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
-          </View>
-        ))}
-      </View>
-
-      <WeeklyActivity data={activity.daily} />
-
       <View style={styles.sectionHead}>
-        <View><Text style={styles.sectionTitle}>Conquistas</Text><Text style={styles.sectionSubtitle}>Pequenas vitórias constroem sua constância</Text></View>
-      </View>
-      <View style={styles.achievements}>
-        {activity.achievements.map((item) => {
-          const Icon = item.code === "FOCUS" ? Target : item.code === "DISCIPLINE" ? Medal : Trophy;
-          return (
-            <View style={[styles.achievement, item.unlocked && styles.achievementUnlocked]} key={item.code}>
-              <View style={styles.achievementTop}>
-                <View style={[styles.achievementIcon, item.unlocked && styles.achievementIconUnlocked]}>
-                  <Icon size={22} color={item.unlocked ? colors.text : colors.primaryLight} strokeWidth={2.35} />
-                </View>
-                <Text style={styles.achievementText}>{item.unlocked ? "FEITO" : `${item.current}/${item.target}`}</Text>
-              </View>
-              <Text style={styles.achievementTitle}>{item.title}</Text>
-              <Text style={styles.achievementSubtitle}>{item.subtitle}</Text>
-            </View>
-          );
-        })}
+        <View>
+          <Text style={styles.sectionEyebrow}>EVOLUÇÃO CORPORAL</Text>
+          <Text style={styles.sectionTitle}>Suas medidas</Text>
+          <Text style={styles.sectionSubtitle}>Compare cada registro com seu ponto de partida</Text>
+        </View>
+        <View style={styles.sectionIcon}><Ruler size={20} color={colors.primaryLight} /></View>
       </View>
 
       <View style={styles.selector}>
@@ -352,7 +362,49 @@ export function EvolutionScreen({ navigation }) {
         )}
       </View>
 
-      <Button title="Adicionar medidas de hoje" icon={CirclePlus} onPress={() => navigation.navigate("AddMeasurement")} />
+      <View style={styles.sectionHead}>
+        <View>
+          <Text style={styles.sectionEyebrow}>ÚLTIMOS 7 DIAS</Text>
+          <Text style={styles.sectionTitle}>Seu ritmo nesta semana</Text>
+          <Text style={styles.sectionSubtitle}>Frequência e tempo dedicados às aulas</Text>
+        </View>
+      </View>
+      <View style={styles.statsRow}>
+        {[
+          [Dumbbell, "Treinos", activity.workouts],
+          [Clock3, "Minutos", activity.minutes],
+          [CalendarDays, "Dias ativos", activity.activeDays],
+        ].map(([Icon, label, value]) => (
+          <View style={styles.statCard} key={label}>
+            <View style={styles.statIcon}><Icon size={17} color={colors.primaryLight} /></View>
+            <Text style={styles.statValue}>{formatNumber(value)}</Text>
+            <Text style={styles.statLabel}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <WeeklyActivity data={activity.daily} />
+
+      <View style={styles.sectionHead}>
+        <View><Text style={styles.sectionTitle}>Conquistas</Text><Text style={styles.sectionSubtitle}>Pequenas vitórias constroem sua constância</Text></View>
+      </View>
+      <View style={styles.achievements}>
+        {activity.achievements.map((item) => {
+          const Icon = item.code === "FOCUS" ? Target : item.code === "DISCIPLINE" ? Medal : Trophy;
+          return (
+            <View style={[styles.achievement, item.unlocked && styles.achievementUnlocked]} key={item.code}>
+              <View style={styles.achievementTop}>
+                <View style={[styles.achievementIcon, item.unlocked && styles.achievementIconUnlocked]}>
+                  <Icon size={22} color={item.unlocked ? colors.text : colors.primaryLight} strokeWidth={2.35} />
+                </View>
+                <Text style={styles.achievementText}>{item.unlocked ? "FEITO" : `${item.current}/${item.target}`}</Text>
+              </View>
+              <Text style={styles.achievementTitle}>{item.title}</Text>
+              <Text style={styles.achievementSubtitle}>{item.subtitle}</Text>
+            </View>
+          );
+        })}
+      </View>
 
       <View style={styles.sectionHead}>
         <View><Text style={styles.sectionTitle}>Histórico de medidas</Text><Text style={styles.sectionSubtitle}>{state.evolution.measurements.length} avaliações registradas</Text></View>
@@ -394,7 +446,8 @@ export function EvolutionScreen({ navigation }) {
   );
 }
 
-export function AddMeasurementScreen({ navigation }) {
+export function AddMeasurementScreen({ navigation, route }) {
+  const isInitial = Boolean(route.params?.initial);
   const [form, setForm] = useState({
     measuredAt: new Date().toISOString().slice(0, 10),
     notes: "",
@@ -410,6 +463,10 @@ export function AddMeasurementScreen({ navigation }) {
   );
   const update = (key, value) => setForm((old) => ({ ...old, [key]: value }));
   const submit = async () => {
+    if (!completeFields) {
+      setError("Informe pelo menos uma medida antes de salvar.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -423,10 +480,22 @@ export function AddMeasurementScreen({ navigation }) {
   };
 
   return (
-    <Screen header="Adicionar medidas de hoje" onBack={navigation.goBack}>
+    <Screen
+      header={isInitial ? "Medidas iniciais" : "Adicionar medidas de hoje"}
+      onBack={navigation.goBack}
+      headerRight={(
+        <Pressable style={styles.closeMeasurement} onPress={navigation.goBack} hitSlop={8}>
+          <X size={15} color={colors.muted} strokeWidth={2.4} />
+          <Text style={styles.closeMeasurementText}>Fechar</Text>
+        </Pressable>
+      )}
+    >
       <View style={styles.formHero}>
         <View style={styles.formHeroIcon}><CalendarDays size={20} color={colors.accent} /></View>
-        <View style={{ flex: 1 }}><Text style={styles.formHeroTitle}>Seu registro de hoje</Text><Text style={styles.formHeroText}>Preencha somente o que desejar. Seu histórico anterior permanece preservado.</Text></View>
+        <View style={{ flex: 1 }}>
+          <View style={styles.formHeroTitleRow}><Text style={styles.formHeroTitle}>{isInitial ? "Seu ponto de partida" : "Seu registro de hoje"}</Text>{isInitial && <Text style={styles.optionalPill}>OPCIONAL</Text>}</View>
+          <Text style={styles.formHeroText}>{isInitial ? "Preencha quando se sentir confortável. Você pode fechar sem salvar e voltar depois." : "Preencha somente o que desejar. Seu histórico anterior permanece preservado."}</Text>
+        </View>
       </View>
       <Pressable style={styles.dateShortcut} onPress={() => setShowDate((value) => !value)}>
         <View style={styles.dateShortcutCopy}><CalendarDays size={16} color={colors.primaryLight} /><Text style={styles.dateShortcutText}>Data: {form.measuredAt}</Text></View>
@@ -442,7 +511,7 @@ export function AddMeasurementScreen({ navigation }) {
 
       <View style={styles.measureGroup}>
         <Text style={styles.measureGroupTitle}>Medidas essenciais</Text>
-        <Text style={styles.measureGroupDescription}>Registre uma ou mais medidas. Todas são opcionais.</Text>
+        <Text style={styles.measureGroupDescription}>Se decidir salvar, registre uma ou mais medidas para criar seu ponto de comparação.</Text>
         <View style={styles.fieldsGrid}>{quickMeasurementFields.map(([key, label, unit]) => <InputField key={key} label={label} unit={unit} value={form[key]} onChangeText={(value) => update(key, value)} />)}</View>
       </View>
 
@@ -512,35 +581,51 @@ export function AddPhotoScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   heading: { marginBottom: 23 },
+  headingTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  headingCopy: { flex: 1 },
+  quickMeasure: { minHeight: 42, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 14, backgroundColor: colors.primaryLight },
+  quickMeasureText: { color: colors.ink, fontFamily: fonts.display, fontSize: 13, letterSpacing: 0.15 },
   eyebrow: { color: colors.primaryLight, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
-  title: { marginTop: 7, color: colors.text, fontSize: 33, fontWeight: "900", letterSpacing: -1 },
+  title: { marginTop: 7, color: colors.text, fontFamily: fonts.displayBold, fontSize: 36, lineHeight: 43, letterSpacing: 0.1 },
   lead: { marginTop: 7, maxWidth: 325, color: colors.muted, fontSize: 14, lineHeight: 21 },
+  initialMeasurementCard: { padding: 22, overflow: "hidden", borderWidth: 1, borderColor: "rgba(232,136,91,.48)", borderRadius: radii.card, backgroundColor: colors.surface },
+  initialMeasurementIcon: { width: 58, height: 58, marginBottom: 20, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.primary },
+  initialMeasurementEyebrow: { color: colors.primaryLight, fontFamily: fonts.semibold, fontSize: 8, letterSpacing: 1.3 },
+  initialMeasurementTitle: { marginTop: 7, color: colors.text, fontFamily: fonts.displayBold, fontSize: 29, lineHeight: 35 },
+  initialMeasurementText: { marginTop: 10, color: colors.muted, fontSize: 12, lineHeight: 19 },
+  initialMeasurementBenefits: { marginVertical: 20, padding: 14, gap: 11, borderWidth: 1, borderColor: colors.line, borderRadius: 16, backgroundColor: colors.surface2 },
+  initialMeasurementBenefit: { flexDirection: "row", alignItems: "center", gap: 9 },
+  initialMeasurementDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  initialMeasurementBenefitText: { flex: 1, color: colors.text, fontFamily: fonts.medium, fontSize: 11, lineHeight: 16 },
+  initialMeasurementActions: { gap: 6 },
+  skipMeasurement: { minHeight: 43, alignItems: "center", justifyContent: "center", borderRadius: 13 },
+  skipMeasurementText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 12 },
   lifetimeCard: { marginBottom: 10, padding: 17, borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: radii.card, backgroundColor: colors.surface },
   lifetimeTop: { flexDirection: "row", alignItems: "center", gap: 11 },
   lifetimeIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: 16, backgroundColor: "rgba(245,179,141,.08)" },
   lifetimeCopy: { flex: 1 },
   lifetimeEyebrow: { color: colors.primaryLight, fontSize: 7, fontWeight: "900", letterSpacing: 1.05 },
-  lifetimeTitle: { marginTop: 4, color: colors.text, fontSize: 15, fontWeight: "900" },
+  lifetimeTitle: { marginTop: 4, color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
   livePill: { paddingVertical: 5, paddingHorizontal: 7, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 9, backgroundColor: "rgba(169,196,154,.1)" },
   liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.success },
   liveText: { color: colors.success, fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
   lifetimeNumberRow: { marginTop: 17, flexDirection: "row", alignItems: "flex-end", gap: 7 },
-  lifetimeNumber: { color: colors.text, fontSize: 39, lineHeight: 43, fontWeight: "900", letterSpacing: -1.6 },
+  lifetimeNumber: { color: colors.text, fontFamily: fonts.displayBold, fontSize: 39, lineHeight: 43, letterSpacing: -0.3 },
   lifetimeUnit: { marginBottom: 6, color: colors.accent, fontSize: 12, fontWeight: "900" },
   lifetimeDescription: { marginTop: 5, color: colors.muted, fontSize: 10, lineHeight: 15 },
   lifetimeStats: { marginTop: 15, paddingTop: 13, flexDirection: "row", borderTopWidth: 1, borderTopColor: colors.line },
   lifetimeStat: { flex: 1, alignItems: "center", gap: 3, borderRightWidth: 1, borderRightColor: colors.line },
-  lifetimeStatValue: { marginTop: 2, color: colors.text, fontSize: 14, fontWeight: "900" },
+  lifetimeStatValue: { marginTop: 2, color: colors.text, fontFamily: fonts.displayBold, fontSize: 16, lineHeight: 19 },
   lifetimeStatLabel: { color: colors.subtle, fontSize: 8, fontWeight: "700" },
   statsRow: { marginBottom: 14, flexDirection: "row", gap: 8 },
   statCard: { flex: 1, minHeight: 116, padding: 11, justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.surface },
   statIcon: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: colors.surface3 },
-  statValue: { marginTop: 8, color: colors.text, fontSize: 22, fontWeight: "900" },
+  statValue: { marginTop: 8, color: colors.text, fontFamily: fonts.displayBold, fontSize: 24, lineHeight: 29 },
   statLabel: { marginTop: 2, color: colors.muted, fontSize: 9, fontWeight: "800" },
   weeklyCard: { marginBottom: 4, padding: 17, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   weeklyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   weeklyEyebrow: { color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
-  weeklyTitle: { marginTop: 4, color: colors.text, fontSize: 17, fontWeight: "900" },
+  weeklyTitle: { marginTop: 4, color: colors.text, fontFamily: fonts.display, fontSize: 19, lineHeight: 23 },
   weekBars: { height: 146, marginTop: 18, flexDirection: "row", alignItems: "flex-end", gap: 7 },
   weekDay: { flex: 1, height: "100%", alignItems: "center", justifyContent: "flex-end" },
   barTrack: { width: 16, height: 93, justifyContent: "flex-end", overflow: "hidden", borderRadius: 8, backgroundColor: colors.surface3 },
@@ -554,7 +639,7 @@ const styles = StyleSheet.create({
   achievementTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   achievementIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(232,136,91,.42)", borderRadius: 14, backgroundColor: colors.surface3 },
   achievementIconUnlocked: { borderColor: "rgba(232,136,91,.7)", backgroundColor: colors.primary },
-  achievementTitle: { marginTop: 17, color: colors.text, fontSize: 12, fontWeight: "900" },
+  achievementTitle: { marginTop: 17, color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
   achievementText: { color: colors.primaryLight, fontSize: 9, fontWeight: "900", letterSpacing: 0.55 },
   achievementSubtitle: { marginTop: 4, color: colors.muted, fontSize: 8, lineHeight: 12 },
   selector: { padding: 4, flexDirection: "row", gap: 3, borderWidth: 1, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.surface },
@@ -566,12 +651,12 @@ const styles = StyleSheet.create({
   chartHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   metricLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
   small: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
-  current: { marginTop: 4, color: colors.text, fontSize: 33, fontWeight: "900", letterSpacing: -1 },
+  current: { marginTop: 4, color: colors.text, fontFamily: fonts.displayBold, fontSize: 35, lineHeight: 42, letterSpacing: 0 },
   currentUnit: { color: colors.muted, fontSize: 15, fontWeight: "700", letterSpacing: 0 },
   change: { paddingVertical: 8, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 14 },
   changePositive: { backgroundColor: "rgba(169,196,154,.12)" },
   changeNeutral: { backgroundColor: "rgba(242,192,120,.12)" },
-  changeValue: { fontSize: 11, fontWeight: "900" },
+  changeValue: { fontFamily: fonts.display, fontSize: 13, lineHeight: 16 },
   changeCaption: { marginTop: 1, color: colors.muted, fontSize: 8, fontWeight: "700" },
   chartWrap: { marginTop: 10 },
   chartUnit: { marginTop: -4, color: colors.subtle, fontSize: 9, textAlign: "right" },
@@ -580,16 +665,18 @@ const styles = StyleSheet.create({
   chartEmptyText: { color: colors.muted, fontSize: 11, lineHeight: 16, textAlign: "center" },
   compare: { marginTop: 7, paddingTop: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.line },
   compareLabel: { color: colors.subtle, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
-  compareValue: { marginTop: 4, color: colors.text, fontSize: 12, fontWeight: "800" },
+  compareValue: { marginTop: 4, color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
   compareDivider: { width: 1, height: 26, backgroundColor: colors.line },
-  sectionHead: { marginTop: 29, marginBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
+  sectionHead: { marginTop: 27, marginBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  sectionEyebrow: { marginBottom: 3, color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
+  sectionIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: 14, backgroundColor: "rgba(245,179,141,.08)" },
+  sectionTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 21, lineHeight: 26, letterSpacing: 0.1 },
   sectionSubtitle: { marginTop: 3, color: colors.muted, fontSize: 11 },
   history: { minHeight: 73, marginBottom: 9, padding: 12, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: colors.line, borderRadius: radii.input, backgroundColor: colors.surface },
   historyIcon: { width: 43, height: 43, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: colors.surface3 },
   historyCopy: { flex: 1 },
   historyTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  historyDate: { color: colors.text, fontSize: 12, fontWeight: "800", textTransform: "capitalize" },
+  historyDate: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18, textTransform: "capitalize" },
   latestPill: { paddingVertical: 3, paddingHorizontal: 6, borderRadius: 7, color: colors.ink, backgroundColor: colors.accent, fontSize: 7, fontWeight: "900", overflow: "hidden" },
   historyValues: { marginTop: 5, color: colors.muted, fontSize: 10 },
   addPhoto: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
@@ -600,12 +687,16 @@ const styles = StyleSheet.create({
   photoLabelText: { color: colors.text, fontSize: 9, fontWeight: "800" },
   photoEmpty: { minHeight: 91, padding: 13, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.input, backgroundColor: colors.surface },
   photoEmptyIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.surface3 },
-  photoEmptyTitle: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  photoEmptyTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
   photoEmptyText: { marginTop: 3, color: colors.muted, fontSize: 10 },
   formHero: { marginBottom: 13, padding: 16, flexDirection: "row", gap: 12, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
   formHeroIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(245,179,141,.15)" },
-  formHeroTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  formHeroTitleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7 },
+  formHeroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
+  optionalPill: { paddingVertical: 3, paddingHorizontal: 6, overflow: "hidden", borderRadius: 7, color: colors.primaryLight, backgroundColor: "rgba(245,179,141,.12)", fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
   formHeroText: { marginTop: 4, color: colors.muted, fontSize: 11, lineHeight: 16 },
+  closeMeasurement: { minHeight: 36, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.surface },
+  closeMeasurementText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 10 },
   dateShortcut: { marginBottom: 2, paddingVertical: 12, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface },
   dateShortcutCopy: { flexDirection: "row", alignItems: "center", gap: 8 },
   dateShortcutText: { color: colors.text, fontSize: 11, fontWeight: "800" },
@@ -617,12 +708,12 @@ const styles = StyleSheet.create({
   formProgressText: { color: colors.primaryLight, fontSize: 10, fontWeight: "800" },
   formProgressOptional: { color: colors.subtle, fontSize: 10 },
   measureGroup: { marginTop: 14, padding: 15, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
-  measureGroupTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  measureGroupTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
   measureGroupDescription: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15 },
   fieldsGrid: { marginTop: 13, flexDirection: "row", flexWrap: "wrap", gap: 9 },
   addDetails: { marginTop: 14, padding: 14, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: "rgba(245,179,141,.42)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
   addDetailsIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: colors.primaryLight },
-  addDetailsTitle: { color: colors.text, fontSize: 13, fontWeight: "900" },
+  addDetailsTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
   addDetailsText: { marginTop: 2, color: colors.muted, fontSize: 9, lineHeight: 14 },
   fieldWrap: { width: "48.5%" },
   fieldLabel: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.55 },
@@ -635,7 +726,7 @@ const styles = StyleSheet.create({
   photoFormLead: { marginBottom: 18, color: colors.muted, fontSize: 13, lineHeight: 20 },
   picker: { height: 294, marginBottom: 20, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   pickerIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.surface3 },
-  pickerTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  pickerTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
   pickerText: { color: colors.muted, fontSize: 10 },
   preview: { width: "100%", height: "100%" },
   poseRow: { marginTop: 10, marginBottom: 18, flexDirection: "row", gap: 8 },

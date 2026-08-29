@@ -1,10 +1,11 @@
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Dumbbell, Home, MessageCircle, TrendingUp, User } from "lucide-react-native";
 import { useAuth } from "../contexts/AuthContext.js";
-import { colors } from "../theme/index.js";
+import { colors, fonts } from "../theme/index.js";
 import {
   ForgotPasswordScreen,
   AccessPendingScreen,
@@ -14,6 +15,7 @@ import {
 } from "../screens/AuthScreens.js";
 import HomeScreen from "../screens/HomeScreen.js";
 import {
+  ContentModuleScreen,
   LessonScreen,
   ProgramDetailScreen,
   ProgramsScreen,
@@ -43,18 +45,11 @@ const tabIcons = {
 function Tabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      tabBar={(props) => <BottomBar {...props} />}
+      screenOptions={{
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
-          const Icon = tabIcons[route.name];
-          return <Icon color={color} size={size} />;
-        },
-        tabBarActiveTintColor: colors.primaryLight,
-        tabBarInactiveTintColor: colors.subtle,
-        tabBarLabelStyle: { fontSize: 9, fontWeight: "800", marginTop: 2 },
-        tabBarStyle: styles.tabBar,
-        tabBarItemStyle: { paddingVertical: 7 },
-      })}
+        tabBarHideOnKeyboard: true,
+      }}
     >
       <Tab.Screen name="Início" component={HomeScreen} />
       <Tab.Screen name="Treinos" component={ProgramsScreen} />
@@ -62,6 +57,37 @@ function Tabs() {
       <Tab.Screen name="Comunidade" component={NoticeScreen} />
       <Tab.Screen name="Perfil" component={ProfileScreen} />
     </Tab.Navigator>
+  );
+}
+
+function BottomBar({ state, descriptors, navigation }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.tabBar, { bottom: Math.max(insets.bottom, 0) + 10 }]}>
+      {state.routes.map((route, index) => {
+        const focused = state.index === index;
+        const Icon = tabIcons[route.name];
+        const color = focused ? colors.primaryLight : colors.subtle;
+        const onPress = () => {
+          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+        };
+        return (
+          <Pressable
+            key={route.key}
+            accessibilityRole="button"
+            accessibilityState={focused ? { selected: true } : {}}
+            accessibilityLabel={descriptors[route.key].options.tabBarAccessibilityLabel || route.name}
+            onPress={onPress}
+            style={({ pressed }) => [styles.tabItem, pressed && styles.tabItemPressed]}
+          >
+            <Icon color={color} size={23} strokeWidth={focused ? 2.5 : 2} />
+            <Text numberOfLines={1} style={[styles.tabLabel, { color }]}>{route.name}</Text>
+            {focused && <View style={styles.tabIndicator} />}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 export default function AppNavigator() {
@@ -99,6 +125,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="Program" component={ProgramDetailScreen} />
+            <Stack.Screen name="ContentModule" component={ContentModuleScreen} />
             <Stack.Screen name="Lesson" component={LessonScreen} />
             <Stack.Screen
               name="MeditationSession"
@@ -145,12 +172,19 @@ const styles = StyleSheet.create({
     left: 14,
     right: 14,
     bottom: 12,
-    height: 70,
-    paddingBottom: 6,
+    height: 76,
+    paddingHorizontal: 7,
+    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "stretch",
     borderTopWidth: 1,
     borderTopColor: colors.line,
     borderRadius: 24,
     backgroundColor: "rgba(28,19,17,.98)",
     elevation: 18,
   },
+  tabItem: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 18 },
+  tabItemPressed: { backgroundColor: "rgba(255,255,255,.04)" },
+  tabLabel: { width: "100%", fontFamily: fonts.semibold, fontSize: 8, lineHeight: 12, textAlign: "center" },
+  tabIndicator: { position: "absolute", top: 0, width: 17, height: 2, borderRadius: 2, backgroundColor: colors.primaryLight },
 });

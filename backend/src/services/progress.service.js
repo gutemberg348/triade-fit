@@ -22,7 +22,7 @@ const availabilityFor = (lessons, index, now = new Date()) => {
     return {
       isLocked: true,
       unlocksAt: null,
-      reason: "Conclua o capítulo anterior para liberar este conteúdo.",
+      reason: "Conclua a aula anterior para liberar este conteúdo.",
     };
 
   const delayHours = lesson.unlockDelayHours || 0;
@@ -37,9 +37,90 @@ const availabilityFor = (lessons, index, now = new Date()) => {
   return {
     isLocked: true,
     unlocksAt: unlocksAt.toISOString(),
-    reason: "Este capítulo será liberado após o intervalo definido pela Personal.",
+    reason: "Esta aula será liberada após o intervalo definido pela Personal.",
   };
 };
+
+export function withModuleProgress(module, now = new Date()) {
+  const lessons = module.lessons || [];
+  const enrichedLessons = lessons.map((lesson, index) => ({
+    ...lesson,
+    availability: availabilityFor(lessons, index, now),
+  }));
+  const completedLessons = enrichedLessons.filter(
+    (lesson) => lesson.progress?.[0]?.completed,
+  ).length;
+  return {
+    ...module,
+    lessons: enrichedLessons,
+    completedLessons,
+    totalLessons: enrichedLessons.length,
+    progressPercent: enrichedLessons.length
+      ? Math.round((completedLessons / enrichedLessons.length) * 100)
+      : 0,
+  };
+}
+
+const moduleCompletionAt = (module) => {
+  if (!module.lessons?.length) return null;
+  const completionDates = module.lessons.map((lesson) => {
+    const progress = lesson.progress?.[0];
+    return progress?.completed ? progress.completedAt : null;
+  });
+  if (completionDates.some((completedAt) => !completedAt)) return null;
+  return new Date(Math.max(...completionDates.map((date) => new Date(date).getTime())));
+};
+
+export function withContentModulesAvailability(modules, now = new Date()) {
+  const enriched = modules.map((module) => withModuleProgress(module, now));
+  return enriched.map((module, index) => {
+    if (module.progressPercent === 100 || index === 0)
+      return {
+        ...module,
+        availability: { isLocked: false, unlocksAt: null, reason: null },
+      };
+
+    const previous = enriched[index - 1];
+    const previousCompletedAt = moduleCompletionAt(previous);
+    if (!previousCompletedAt)
+      return {
+        ...module,
+        availability: {
+          isLocked: true,
+          unlocksAt: null,
+          reason: `Conclua o módulo “${previous.title}” para liberar este conteúdo.`,
+        },
+      };
+
+    const delayDays = module.unlockDelayDays || 0;
+    if (!delayDays)
+      return {
+        ...module,
+        availability: { isLocked: false, unlocksAt: null, reason: null },
+      };
+
+    const unlocksAt = new Date(
+      previousCompletedAt.getTime() + delayDays * 24 * 60 * 60 * 1000,
+    );
+    if (unlocksAt <= now)
+      return {
+        ...module,
+        availability: {
+          isLocked: false,
+          unlocksAt: unlocksAt.toISOString(),
+          reason: null,
+        },
+      };
+    return {
+      ...module,
+      availability: {
+        isLocked: true,
+        unlocksAt: unlocksAt.toISOString(),
+        reason: `Este módulo abre ${delayDays} dia${delayDays === 1 ? "" : "s"} após concluir o anterior.`,
+      },
+    };
+  });
+}
 
 export function withSequentialAvailability(program, now = new Date()) {
   const lessons = program.modules.flatMap((module) => module.lessons);
@@ -101,7 +182,7 @@ export async function requireEnrolledLesson(studentId, lessonId) {
     include: {
       module: {
         include: {
-          program: { select: { id: true, title: true } },
+          program: { select: { id: true, title: true, type: true } },
         },
       },
       progress: {
@@ -111,9 +192,49 @@ export async function requireEnrolledLesson(studentId, lessonId) {
     },
   });
   if (!lesson) throw new AppError(404, "Aula não encontrada ou indisponível.");
+  if (lesson.module.program.type === "CONTENT") {
+    const contentModules = await prisma.module.findMany({
+      where: {
+        status: "PUBLISHED",
+        program: {
+          type: "CONTENT",
+          status: "PUBLISHED",
+          enrollments: { some: { studentId, status: "ACTIVE" } },
+        },
+      },
+      orderBy: [{ program: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        unlockDelayDays: true,
+        lessons: {
+          where: { status: "PUBLISHED" },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            unlockDelayHours: true,
+            progress: {
+              where: { studentId },
+              select: { completed: true, completedAt: true },
+            },
+          },
+        },
+      },
+    });
+    const currentModule = withContentModulesAvailability(contentModules).find(
+      (module) => module.id === lesson.module.id,
+    );
+    if (currentModule?.availability.isLocked)
+      throw new AppError(403, currentModule.availability.reason, {
+        unlocksAt: currentModule.availability.unlocksAt,
+      });
+  }
   const modules = await prisma.module.findMany({
     where: {
       programId: lesson.module.program.id,
+      ...(lesson.module.program.type === "CONTENT"
+        ? { id: lesson.module.id }
+        : {}),
       status: "PUBLISHED",
     },
     orderBy: { sortOrder: "asc" },

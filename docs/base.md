@@ -2,7 +2,7 @@
 
 > Documento de contexto permanente para desenvolvimento e manutenção.
 >
-> Última revisão completa: **24 de agosto de 2026**.
+> Última revisão completa: **28 de agosto de 2026**.
 
 ## 1. Para que este arquivo existe
 
@@ -42,7 +42,7 @@ Não existem chamadas diretas dos clientes ao banco. Toda leitura ou mutação p
 
 Na criação deste documento, o projeto estava funcional como MVP e havia sido validado com:
 
-- schema Prisma válido e migrations aplicadas até `202608240012_replace_legacy_covers`;
+- schema Prisma válido e migrations aplicadas até `202608280003_remove_lesson_calories`;
 - seed executado;
 - teste unitário do backend aprovado;
 - build de produção do painel aprovado;
@@ -314,9 +314,9 @@ Formam a hierarquia de conteúdo:
 Program 1 ── N Module 1 ── N Lesson
 ```
 
-Cada nível tem status e `sortOrder`. Aulas/capítulos podem conter descrição, capa, vídeo opcional, instruções, duração, categoria, tipo (`WORKOUT` ou `MEDITATION`), dificuldade, calorias estimadas, materiais JSON, notas e `unlockDelayHours`. Materiais são uma lista de `{ title, url, type }`, em que `type` é `FILE` ou `LINK`. Meditações também possuem `showMeditationButton`: quando ativo, a aula mostra o botão de prática guiada mesmo que também tenha vídeo; quando inativo, a aula é somente vídeo e o vídeo é obrigatório. Para a aluna, somente conteúdo publicado deve aparecer.
+Cada nível tem status e `sortOrder`. Aulas podem conter descrição, capa, vídeo opcional, instruções, duração, categoria, tipo (`CONTENT`, `WORKOUT` ou `MEDITATION`), dificuldade, materiais JSON, notas, `isIntroductory` e `unlockDelayHours`. Materiais são uma lista de `{ title, url, type }`, em que `type` é `FILE` ou `LINK`. Meditações também possuem `showMeditationButton`: quando ativo, a aula mostra o botão de prática guiada mesmo que também tenha vídeo; quando inativo, a aula é somente vídeo e o vídeo é obrigatório. Para a aluna, somente conteúdo publicado deve aparecer.
 
-A liberação é sequencial em todo o programa, atravessando módulos: o primeiro capítulo fica livre; os seguintes exigem a conclusão do capítulo imediatamente anterior. Se `unlockDelayHours` for maior que zero, a abertura ocorre em `completedAt + unlockDelayHours`. A API adiciona `availability` a cada capítulo e também bloqueia `GET /lessons/:id`; portanto o bloqueio não depende apenas da interface mobile.
+A liberação é sequencial dentro do módulo para conteúdo `CONTENT` e em todo o programa para `TRAINING`: a primeira aula fica livre; as seguintes exigem a conclusão da aula imediatamente anterior. Se `unlockDelayHours` for maior que zero, a abertura ocorre em `completedAt + unlockDelayHours`. A API adiciona `availability` a cada aula e também bloqueia `GET /lessons/:id`; portanto o bloqueio não depende apenas da interface mobile.
 
 `sortOrder` é único dentro de cada programa para módulos e dentro de cada módulo para aulas. A API calcula o próximo valor quando ele não é informado.
 
@@ -330,7 +330,7 @@ No cadastro público, a aluna é matriculada automaticamente em todos os program
 
 Registra visualização e conclusão. A combinação aluna+aula é única. Abrir uma aula cria ou atualiza `lastViewedAt`; concluir define `completed` e `completedAt`. A conclusão pode ser desfeita pela API com `{ "completed": false }`, embora a tela atual só envie `true`.
 
-Calorias não são incrementadas em uma coluna separada: a API soma `Lesson.calories` das aulas `WORKOUT` concluídas. Como existe um único `LessonProgress` por aluna+aula e `completedAt` é preservado ao repetir a conclusão, a mesma aula não duplica o total. A resposta de conclusão inclui `caloriesAdded`; vale zero se a aula já estava concluída ou se for meditação.
+O produto não estima nem soma calorias por aula. A migration `202608280003_remove_lesson_calories` removeu `Lesson.calories`; conclusão, admin e Evolução trabalham com aulas, treinos, minutos e dias ativos.
 
 O percentual não é armazenado: é calculado contando aulas publicadas concluídas. Isso evita percentuais desatualizados quando o conteúdo muda.
 
@@ -614,7 +614,7 @@ Rotas web em `admin/src/App.jsx`:
 | `/dashboard` | métricas e atividade recente |
 | `/alunos` | busca e cadastro de alunos |
 | `/alunos/:id` | ficha, edição, status, medidas, gráfico, fotos e progresso |
-| `/programas` | árvore de programas, módulos, capítulos e materiais |
+| `/programas` | abas simplificadas de módulos da Home e programas de treino, ambos com aulas diretas |
 | `/avisos` | comunidade: postagens do feed e avisos |
 | `/configuracoes` | identidade do app, imagens, banners e precificação do plano |
 
@@ -627,11 +627,10 @@ Comportamentos importantes:
 - busca de alunos tem debounce de 300 ms e pede até 50 registros;
 - cadastro de aluno usa senha inicial preenchida e envia `programIds: []`;
 - ficha do aluno permite ativar/inativar, editar dados, redefinir senha com revogação de sessões, excluir com confirmação forte e adicionar avaliação;
-- programas são geridos em árvore e “excluir” arquiva;
+- módulos da Home e programas de treino são geridos separadamente; “excluir” arquiva;
 - a área Comunidade separa postagens e avisos, permite upload ou URL de imagem e controla publicação/rascunho;
 - Configurações do app publica textos, imagem de login, banners e preços de Pix/cartão com prévia do cálculo de juros;
-- o cadastro de capítulos permite definir treino ou meditação, duração, nível, calorias, vídeo por URL/upload, materiais por arquivo/link, atraso de liberação e o formato “prática guiada” ou “somente vídeo”;
-- o campo de calorias aparece apenas em capítulos de treino e explica que o valor será somado automaticamente ao progresso da aluna;
+- o cadastro de aulas permite definir conteúdo, treino ou meditação, duração, nível, vídeo por URL/upload, materiais por arquivo/link, atraso de liberação e o formato “prática guiada” ou “somente vídeo”. A área de vídeo mostra progresso do upload, prévia antes de salvar e aceita YouTube, Vimeo ou mídia HTTPS direta; o timeout específico do upload é de 180 segundos;
 - avisos do painel oferecem hoje apenas `ALL` e `ACTIVE_STUDENTS`;
 - `SPECIFIC_STUDENTS` existe na API, mas ainda não possui seletor de alunos na interface;
 - o painel não possui interface de atribuição de programas ao aluno, embora a API aceite `programIds`.
@@ -673,12 +672,12 @@ Dados pessoais e Alterar senha.
 Responsabilidade das telas:
 
 - **Cadastro**: pede somente nome, e-mail, senha e confirmação; telefone e código de indicação são opcionais. Não pergunta objetivo/interesse nessa etapa. A validação acontece antes do envio e a resposta `422` da API é exibida no campo correspondente, sem limpar os demais valores digitados;
-- **Início**: carrega programas, avisos e configuração visual em paralelo; apresenta a fotografia editorial da marca, o próximo capítulo, módulos e comunicação recente;
-- **Treinos**: lista programas matriculados e abre módulos/aulas;
-- **Aula**: mostra capa/vídeo, duração, nível, calorias, instruções, anterior/próxima e ação de conclusão. Em treino com estimativa, o botão informa quantas kcal serão somadas e a conclusão mostra confirmação; uma aula já concluída fica marcada e não soma novamente;
+- **Início**: carrega `/home-content` e avisos em paralelo; apresenta até três aulas introdutórias em carrossel, módulos com capa/progresso e comunicação recente;
+- **Treinos**: lista somente programas `TRAINING` e abre as aulas/exercícios diretamente, sem módulo visual;
+- **Aula**: mostra capa/vídeo, duração, nível/categoria, instruções, anterior/próxima e ação de conclusão. Arquivos enviados e URLs de mídia direta usam `expo-video`; links de YouTube/Vimeo são convertidos para reprodução incorporada com `react-native-webview` no Android/iOS e `iframe` na web. O carregamento possui limite de 15 segundos e, em falha, oferece nova tentativa e abertura externa em vez de manter spinner infinito;
 - **Meditação**: uma aula marcada como “prática guiada” abre o cronômetro circular com iniciar, pausar e conclusão automática. Ela é acessada pelo botão da própria aula, não por uma aba inferior;
-- **Evolução**: destaca calorias acumuladas desde o primeiro treino, totais históricos, métricas dos últimos 7 dias, gráfico semanal, conquistas, medidas, comparação inicial/atual, histórico e fotos;
-- **Nova medição**: abre com Peso, Cintura, Quadril e Gordura; data, observação e medidas detalhadas ficam recolhidas para reduzir atrito, mas todos os campos corporais continuam disponíveis;
+- **Evolução**: destaca consistência, aulas, treinos, minutos, dias ativos, gráfico semanal, conquistas, medidas, comparação inicial/atual, histórico e fotos. No painel preenchido, “Nova medida” é uma ação compacta no cabeçalho e a evolução corporal aparece antes do resumo semanal; não existe mais um botão laranja de largura total repetido abaixo do gráfico. Sem nenhuma medição, mostra sempre o onboarding de medidas iniciais e o botão de cadastro; após o primeiro registro, abre o painel completo. Frontend e `measurementSchema` exigem pelo menos uma medida numérica para impedir um registro inicial vazio;
+- **Nova medição**: abre com Peso, Cintura, Quadril e Gordura; data, observação e medidas detalhadas ficam recolhidas para reduzir atrito, mas todos os campos corporais continuam disponíveis. A medição inicial é recomendada, não obrigatória: a aluna pode usar **Agora não** no convite ou **Fechar** no formulário sem criar um registro;
 - **Nova foto**: escolhe imagem, envia arquivo e registra pose/data;
 - **Comunidade**: alterna entre postagens do feed e avisos publicados pelo painel; imagens das postagens abrem em visualização ampliada e o coração permite curtir/descurtir sem exibir contagem;
 - **Perfil**: exibe conta, edita dados e avatar, troca senha e encerra sessão.
@@ -742,7 +741,7 @@ Regra crítica: **o seed apaga toda a base antes de recriar os exemplos**. Use-o
 
 ## 17. Comandos de trabalho e validação
 
-O painel facilita o cadastro de aulas de meditação com a opção **Botão para prática guiada** ou **Somente vídeo**. Em ambos os casos o vídeo aceita URL ou upload MP4, WebM e MOV de até 150 MB; para a opção somente vídeo, o backend impede salvar sem vídeo.
+O painel facilita o cadastro de aulas de meditação com a opção **Botão para prática guiada** ou **Somente vídeo**. Em ambos os casos o vídeo aceita URL ou upload MP4, WebM e MOV de até 150 MB; MP4 é o formato recomendado pela compatibilidade entre Android e iOS. A prévia reconhece YouTube e Vimeo. Para a opção somente vídeo, o backend impede salvar sem vídeo. O Nginx deve usar `client_max_body_size 160M`, pois o envelope multipart acrescenta alguns bytes ao arquivo cujo limite real na API é 150 MB.
 
 Na raiz:
 
@@ -1077,3 +1076,70 @@ Se você acabou de chegar ao projeto:
 7. valide e atualize esta memória técnica.
 
 Em uma frase: **o backend é a fonte das regras e permissões, o Prisma é a fonte do modelo persistido, e os dois clientes são experiências distintas sobre a mesma API**.
+
+## 27. Catálogo simplificado: conteúdo da Home e programas de treino
+
+Em 28 de agosto de 2026, o catálogo foi separado em duas experiências que não devem voltar a ser misturadas na interface:
+
+1. **Conteúdo da Home:** módulo → aulas;
+2. **Treinos:** programa de treino → aulas/exercícios.
+
+O banco continua usando `Program → Module → Lesson` internamente para preservar matrículas, progresso, ordenação e dados existentes. Essa camada técnica não deve ser exposta ao admin nem à aluna quando não agrega valor:
+
+- `Program.type = CONTENT`: o programa funciona como agrupador técnico. O painel esconde esse nível, lista os módulos diretamente e cria um agrupador automaticamente se ainda não existir;
+- `Program.type = TRAINING`: o programa é visível na aba Treinos. O backend cria um módulo interno chamado `Aulas`, mas painel e mobile mostram as aulas diretamente dentro do programa;
+- `Lesson.kind = CONTENT`: aula geral;
+- `Lesson.kind = WORKOUT`: aula/exercício usada nos indicadores de treino;
+- `Lesson.kind = MEDITATION`: aula que pode abrir a prática guiada e ter vídeo opcional conforme `showMeditationButton`;
+- `Lesson.isIntroductory`: seleciona a aula para o carrossel superior da Home. No máximo três aulas publicadas/não arquivadas podem ficar marcadas.
+
+### Contratos públicos atuais
+
+| Método | Rota | Função |
+| --- | --- | --- |
+| `GET` | `/home-content` | devolve `{ introLessons, modules }` para a Home |
+| `GET` | `/content-modules/:id` | devolve um módulo da Home, suas aulas, progresso e bloqueios |
+| `GET` | `/training-programs` | lista somente programas `TRAINING`, com aulas já achatadas |
+| `GET` | `/training-programs/:id` | detalhe do treino com `lessons`, sem módulo visual |
+
+As rotas antigas `/programs`, `/programs/:id` e `/modules/:id` continuam existindo por compatibilidade, mas novas telas não devem usá-las para misturar os dois catálogos.
+
+### Regras de sequência
+
+- em conteúdo `CONTENT`, anterior/próxima e bloqueio sequencial são calculados somente dentro do módulo aberto;
+- em treino `TRAINING`, a sequência considera todas as aulas do programa, mesmo que tecnicamente existam módulos internos;
+- a conclusão continua registrada em `LessonProgress`, portanto a migração de interface não apaga nem reinicia progresso;
+- a migration `202608280001_simplify_content_catalog` mantém programas existentes como `CONTENT` e marca as três primeiras aulas publicadas como introdutórias. Programas de treino novos devem ser cadastrados na aba específica do painel.
+
+### Telas e painel
+
+- Home: carrossel horizontal de até três aulas introdutórias; abaixo, módulos com capa, nome, quantidade de aulas e progresso;
+- detalhe do módulo: capa e aulas em carrossel horizontal no estilo de episódios;
+- Treinos: lista apenas programas `TRAINING`; o detalhe lista aulas/exercícios diretamente;
+- admin `/programas`: abas **Módulos da Home** e **Programas de treino**. Em ambas, a ação principal cria o item visível e depois permite adicionar aulas diretamente;
+- capas, vídeo por URL/upload, meditação, materiais e atraso de liberação continuam disponíveis no formulário simplificado.
+
+Ao alterar este domínio, preserve a distinção `CONTENT`/`TRAINING`, não remova o agrupamento interno sem uma migração completa de matrículas/progresso e valide os três projetos: testes do backend, build do admin e export do Expo.
+
+### Liberação programada dos módulos da Home
+
+Módulos `CONTENT` possuem `Module.unlockDelayDays`, configurável no admin em **Módulos da Home → editar módulo**:
+
+- o primeiro módulo publicado fica disponível imediatamente;
+- um módulo posterior exige todas as aulas publicadas do módulo anterior concluídas;
+- `unlockDelayDays = 0` libera imediatamente depois da conclusão;
+- um valor maior que zero calcula `unlocksAt` a partir da conclusão mais recente entre as aulas do módulo anterior;
+- módulo já totalmente concluído não volta a ser bloqueado;
+- a Home mostra cadeado, motivo ou data de liberação e não permite o toque enquanto bloqueado;
+- `GET /content-modules/:id` e `GET /lessons/:id` também recusam o acesso com `403`, impedindo contornar a regra por link direto.
+
+A função canônica é `withContentModulesAvailability` em `backend/src/services/progress.service.js`. Não replique esse cálculo apenas no mobile.
+
+### Tipografia mobile
+
+O mobile usa duas famílias carregadas localmente pelo Expo:
+
+- **Oswald 500/600/700** para títulos editoriais, números, nomes de módulos e chamadas de destaque;
+- **Inter 400/500/600/700/800** para corpo, metadados, formulários, botões e navegação.
+
+Os nomes das fontes ficam centralizados em `mobile/src/theme/index.js` no objeto `fonts`. Todas as telas principais aplicam Oswald em títulos de página, títulos de cartão, nomes e números editoriais; Inter permanece em descrições, campos, metadados e textos longos para preservar legibilidade. Ao criar uma tela, use `fonts.display`/`fonts.displayBold` na hierarquia de destaque e `fonts.body` ou a família Inter no conteúdo. A barra inferior possui altura, line-height e deslocamento calculado com `useSafeAreaInsets`; não fixe rótulos junto à borda inferior.

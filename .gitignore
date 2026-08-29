@@ -23,6 +23,7 @@ coverage/
 .expo-shared/
 **/.expo-shared/
 .expo-validation-*/
+mobile/.expo-*-validation*/
 mobile/.metro-health-check*
 mobile/web-build/
 

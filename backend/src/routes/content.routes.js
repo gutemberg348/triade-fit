@@ -9,7 +9,21 @@ import * as controller from "../controllers/content.controller.js";
 const router = Router();
 const studentOnly = [authenticate, authorize("STUDENT"), requireActiveAccess];
 router.get("/programs", ...studentOnly, asyncHandler(controller.listPrograms));
+router.get("/home-content", ...studentOnly, asyncHandler(controller.listHomeContent));
+router.get("/training-programs", ...studentOnly, asyncHandler(controller.listTrainingPrograms));
 router.get("/meditations", ...studentOnly, asyncHandler(controller.listMeditations));
+router.get(
+  "/content-modules/:id",
+  ...studentOnly,
+  validate(idParams, "params"),
+  asyncHandler(controller.getContentModule),
+);
+router.get(
+  "/training-programs/:id",
+  ...studentOnly,
+  validate(idParams, "params"),
+  asyncHandler(controller.getTrainingProgram),
+);
 router.get(
   "/programs/:id",
   ...studentOnly,

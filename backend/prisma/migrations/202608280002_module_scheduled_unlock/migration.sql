@@ -1,0 +1,2 @@
+ALTER TABLE "Module"
+ADD COLUMN "unlockDelayDays" INTEGER NOT NULL DEFAULT 0;

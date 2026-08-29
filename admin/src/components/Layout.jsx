@@ -19,7 +19,7 @@ import { useAuth } from "../contexts/AuthContext.jsx";
 const links = [
   ["/dashboard", LayoutDashboard, "Dashboard"],
   ["/alunos", Users, "Alunos"],
-  ["/programas", BookOpen, "Programas e aulas"],
+  ["/programas", BookOpen, "Conteúdos e treinos"],
   ["/parceiros", Handshake, "Parceiros e saldo"],
   ["/avisos", MessageCircle, "Comunidade"],
   ["/configuracoes", Settings, "Configurações"],

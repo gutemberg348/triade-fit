@@ -30,7 +30,7 @@ import * as Clipboard from "expo-clipboard";
 import { Brand, Button, Screen } from "../components/UI.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import api, { messageFrom } from "../services/api.js";
-import { colors, radii } from "../theme/index.js";
+import { colors, fonts, radii } from "../theme/index.js";
 
 const APP_CONFIG_CACHE_KEY = "@triade-fit/app-config";
 
@@ -1231,10 +1231,10 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     marginTop: 10,
     color: colors.text,
-    fontSize: 43,
-    lineHeight: 47,
-    fontWeight: "900",
-    letterSpacing: -1.2,
+    fontFamily: fonts.displayBold,
+    fontSize: 45,
+    lineHeight: 51,
+    letterSpacing: 0.1,
   },
   em: { color: colors.copperLight, fontStyle: "italic" },
   subtitle: {
@@ -1280,7 +1280,7 @@ const styles = StyleSheet.create({
   registerHero: { marginBottom: 20, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: radii.card, backgroundColor: colors.surface },
   registerHeroIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: colors.primaryLight },
   registerHeroEyebrow: { color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
-  registerHeroTitle: { marginTop: 4, color: colors.text, fontSize: 18, fontWeight: "900" },
+  registerHeroTitle: { marginTop: 4, color: colors.text, fontFamily: fonts.display, fontSize: 21, lineHeight: 26 },
   registerHeroText: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15 },
   registrationFieldWrap: { marginBottom: 14 },
   registrationLabel: { marginBottom: 7, color: colors.text, fontSize: 11, fontWeight: "800" },
@@ -1301,7 +1301,7 @@ const styles = StyleSheet.create({
   accessScreen: { backgroundColor: colors.bg },
   accessCard: { padding: 25, alignItems: "center", borderWidth: 1, borderColor: colors.line, borderRadius: radii.hero, backgroundColor: colors.surface },
   accessIcon: { width: 58, height: 58, alignItems: "center", justifyContent: "center", marginBottom: 20, borderRadius: 20, backgroundColor: colors.primaryLight },
-  accessTitle: { marginTop: 6, color: colors.text, fontSize: 27, fontWeight: "900" },
+  accessTitle: { marginTop: 6, color: colors.text, fontFamily: fonts.displayBold, fontSize: 30, lineHeight: 37 },
   accessText: { marginTop: 12, marginBottom: 24, color: colors.muted, fontSize: 13, lineHeight: 21, textAlign: "center" },
   planBox: { width: "100%", marginBottom: 14, padding: 16, borderWidth: 1, borderColor: "rgba(243,174,125,.36)", borderRadius: 18, backgroundColor: "rgba(90,50,32,.28)" },
   planLoading: { width: "100%", minHeight: 104, marginBottom: 14, padding: 18, alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.surface },
@@ -1310,14 +1310,14 @@ const styles = StyleSheet.create({
   planBannerImage: { borderTopLeftRadius: 17, borderTopRightRadius: 17 },
   planBannerGradient: { ...StyleSheet.absoluteFillObject },
   planEyebrow: { color: colors.copperLight, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
-  planTitle: { marginTop: 6, color: colors.text, fontSize: 16, fontWeight: "800" },
-  planPrice: { color: colors.copperLight, fontSize: 22, fontWeight: "900" },
+  planTitle: { marginTop: 6, color: colors.text, fontFamily: fonts.display, fontSize: 19, lineHeight: 24 },
+  planPrice: { color: colors.copperLight, fontFamily: fonts.displayBold, fontSize: 25, lineHeight: 30 },
   planDetail: { marginTop: 4, marginBottom: 15, color: colors.muted, fontSize: 11, lineHeight: 16, fontWeight: "700" },
   priceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   priceLabel: { color: colors.text, fontSize: 12, fontWeight: "800" },
   priceDivider: { height: 1, marginVertical: 12, backgroundColor: colors.line },
-  installmentText: { marginTop: 3, color: colors.copperLight, fontSize: 12, fontWeight: "900" },
-  cardTotal: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  installmentText: { marginTop: 3, color: colors.copperLight, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
+  cardTotal: { color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
   interestText: { marginTop: 10, color: colors.muted, fontSize: 10, lineHeight: 15, textAlign: "right" },
   cardButton: { marginTop: 9 },
   refreshAccess: { width: "100%", minHeight: 40, marginTop: 2, marginBottom: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
@@ -1327,9 +1327,9 @@ const styles = StyleSheet.create({
   paymentBackText: { color: colors.primaryLight, fontSize: 10, fontWeight: "800" },
   paymentMethodHeading: { marginBottom: 22, flexDirection: "row", alignItems: "center", gap: 12 },
   paymentMethodIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: colors.primaryLight },
-  paymentMethodTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
+  paymentMethodTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 21, lineHeight: 26 },
   paymentMethodText: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15 },
-  paymentSectionTitle: { marginTop: 3, marginBottom: 4, color: colors.text, fontSize: 13, fontWeight: "900" },
+  paymentSectionTitle: { marginTop: 3, marginBottom: 4, color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
   paymentSectionText: { marginBottom: 15, color: colors.subtle, fontSize: 9, lineHeight: 14 },
   paymentRow: { width: "100%", flexDirection: "row", gap: 9 },
   paymentRowWide: { flex: 1.25 },
@@ -1338,8 +1338,8 @@ const styles = StyleSheet.create({
   securePaymentText: { marginTop: 10, color: colors.subtle, fontSize: 9, lineHeight: 14, textAlign: "center" },
   pixCard: { width: "100%", marginBottom: 16, padding: 18, alignItems: "center", borderWidth: 1, borderColor: "rgba(169,196,154,.5)", borderRadius: radii.card, backgroundColor: colors.surface2 },
   pixSuccessIcon: { width: 52, height: 52, marginBottom: 10, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: colors.success },
-  pixTitle: { color: colors.text, fontSize: 21, fontWeight: "900" },
-  pixAmount: { marginTop: 3, color: colors.primaryLight, fontSize: 25, fontWeight: "900" },
+  pixTitle: { color: colors.text, fontFamily: fonts.displayBold, fontSize: 25, lineHeight: 31 },
+  pixAmount: { marginTop: 3, color: colors.primaryLight, fontFamily: fonts.displayBold, fontSize: 28, lineHeight: 34 },
   pixQrCode: { width: 220, height: 220, marginVertical: 18, borderRadius: 12, backgroundColor: "#FFFFFF" },
   pixHelp: { marginBottom: 10, color: colors.muted, fontSize: 10, lineHeight: 15, textAlign: "center" },
   pixPayload: { width: "100%", minHeight: 84, marginBottom: 12, padding: 12, color: colors.text, fontSize: 9, lineHeight: 13, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.bg, textAlignVertical: "top" },

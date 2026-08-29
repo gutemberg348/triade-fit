@@ -4,7 +4,7 @@ import { Bell, Heart, Sparkles, X } from "lucide-react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import api, { messageFrom } from "../services/api.js";
 import { Empty, ErrorBox, Loading, Screen } from "../components/UI.js";
-import { colors, radii } from "../theme/index.js";
+import { colors, fonts, radii } from "../theme/index.js";
 
 export default function NoticeScreen() {
   const [activeTab, setActiveTab] = useState("feed");
@@ -221,7 +221,7 @@ const formatDate = (value) =>
 const styles = StyleSheet.create({
   heading: { marginBottom: 18 },
   eyebrow: { color: colors.copperLight, fontSize: 9, fontWeight: "800", letterSpacing: 1.4 },
-  title: { marginTop: 5, color: colors.text, fontSize: 32, fontWeight: "900", letterSpacing: -0.8 },
+  title: { marginTop: 5, color: colors.text, fontFamily: fonts.displayBold, fontSize: 36, lineHeight: 43, letterSpacing: 0.1 },
   lead: { marginTop: 5, color: colors.muted, lineHeight: 19 },
   tabs: {
     marginBottom: 18,
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   avatar: { width: 42, height: 42, borderRadius: 21 },
   avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
   avatarText: { color: colors.copperLight, fontSize: 16, fontWeight: "900" },
-  author: { color: colors.text, fontSize: 12, fontWeight: "900" },
+  author: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
   date: { marginTop: 3, color: colors.subtle, fontSize: 8, fontWeight: "800", letterSpacing: 0.5 },
   postMessage: { paddingHorizontal: 15, paddingBottom: 14, color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: "600" },
   postImage: { width: "100%", aspectRatio: 1.15, backgroundColor: colors.surface2 },
@@ -265,6 +265,6 @@ const styles = StyleSheet.create({
   noticeImage: { width: "100%", height: 140 },
   noticeRow: { padding: 16, flexDirection: "row", gap: 12 },
   noticeIcon: { width: 43, height: 43, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.surface3 },
-  noticeTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  noticeTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
   noticeMessage: { marginTop: 6, color: colors.muted, fontSize: 11, lineHeight: 17 },
 });
