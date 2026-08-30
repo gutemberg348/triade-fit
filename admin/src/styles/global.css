@@ -863,6 +863,12 @@ select {
   background: transparent;
   box-shadow: none;
 }
+.app-error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
 .table-card,
 .measurements-panel {
   overflow: hidden;

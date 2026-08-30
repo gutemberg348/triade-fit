@@ -51,7 +51,7 @@ function LessonVideoPreview({ value }) {
 }
 
 export default function Programs() {
-  const { data = [], loading, error, reload } = useApi("/admin/programs");
+  const { data, loading, error, reload } = useApi("/admin/programs");
   const [section, setSection] = useState("CONTENT");
   const [editor, setEditor] = useState(null);
   const [form, setForm] = useState({});
@@ -62,10 +62,14 @@ export default function Programs() {
   const [uploadingMaterial, setUploadingMaterial] = useState(null);
   const [formError, setFormError] = useState("");
 
-  const contentModules = useMemo(() => data
-    .filter((program) => program.type === "CONTENT")
-    .flatMap((program) => program.modules.map((module) => ({ ...module, programId: program.id }))), [data]);
-  const trainingPrograms = useMemo(() => data.filter((program) => program.type === "TRAINING"), [data]);
+  const programs = Array.isArray(data) ? data : [];
+  const contentModules = useMemo(() => programs
+    .filter((program) => program?.type === "CONTENT")
+    .flatMap((program) => (Array.isArray(program.modules) ? program.modules : [])
+      .map((module) => ({ ...module, lessons: Array.isArray(module.lessons) ? module.lessons : [], programId: program.id }))), [programs]);
+  const trainingPrograms = useMemo(() => programs
+    .filter((program) => program?.type === "TRAINING")
+    .map((program) => ({ ...program, modules: Array.isArray(program.modules) ? program.modules : [], lessons: Array.isArray(program.lessons) ? program.lessons : [] })), [programs]);
 
   const open = (entity, item = null, preset = {}) => {
     const context = preset.context || (section === "TRAINING" ? "TRAINING" : "CONTENT");
@@ -214,7 +218,7 @@ export default function Programs() {
       {items.length ? (
         <div className="program-list catalog-list">
           {items.map((item) => {
-            const lessons = item.lessons || [];
+            const lessons = Array.isArray(item.lessons) ? item.lessons : [];
             const context = section;
             const entity = context === "CONTENT" ? "module" : "program";
             return (

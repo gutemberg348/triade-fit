@@ -628,6 +628,7 @@ Comportamentos importantes:
 - cadastro de aluno usa senha inicial preenchida e envia `programIds: []`;
 - ficha do aluno permite ativar/inativar, editar dados, redefinir senha com revogação de sessões, excluir com confirmação forte e adicionar avaliação;
 - módulos da Home e programas de treino são geridos separadamente; “excluir” arquiva;
+- a tela de Programas normaliza respostas e registros legados sem `modules`/`lessons` como listas vazias, evitando que um item antigo derrube o painel inteiro;
 - a área Comunidade separa postagens e avisos, permite upload ou URL de imagem e controla publicação/rascunho;
 - Configurações do app publica textos, imagem de login, banners e preços de Pix/cartão com prévia do cálculo de juros;
 - o cadastro de aulas permite definir conteúdo, treino ou meditação, duração, nível, vídeo por URL/upload, materiais por arquivo/link, atraso de liberação e o formato “prática guiada” ou “somente vídeo”. A área de vídeo mostra progresso do upload, prévia antes de salvar e aceita YouTube, Vimeo ou mídia HTTPS direta; o timeout específico do upload é de 180 segundos;
