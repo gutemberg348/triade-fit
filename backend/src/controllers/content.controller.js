@@ -80,7 +80,7 @@ export const listHomeContent = async (req, res) => {
           moduleTitle: module.title,
         })),
   );
-  const selected = allLessons.filter((lesson) => lesson.isIntroductory).slice(0, 3);
+  const selected = allLessons.filter((lesson) => lesson.isIntroductory);
   const introLessons = selected.length ? selected : allLessons.slice(0, 3);
   const baseUrl = requestBaseUrl(req);
   res.json({

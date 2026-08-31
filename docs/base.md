@@ -673,7 +673,7 @@ Dados pessoais e Alterar senha.
 Responsabilidade das telas:
 
 - **Cadastro**: pede somente nome, e-mail, senha e confirmação; telefone e código de indicação são opcionais. Não pergunta objetivo/interesse nessa etapa. A validação acontece antes do envio e a resposta `422` da API é exibida no campo correspondente, sem limpar os demais valores digitados;
-- **Início**: carrega `/home-content` e avisos em paralelo; apresenta até três aulas introdutórias em carrossel, módulos com capa/progresso e comunicação recente;
+- **Início**: carrega `/home-content` e avisos em paralelo; apresenta todas as aulas marcadas como introdutórias em carrossel, módulos com capa/progresso e comunicação recente. Se nenhuma estiver marcada, usa as três primeiras aulas publicadas como contingência;
 - **Treinos**: lista somente programas `TRAINING` e abre as aulas/exercícios diretamente, sem módulo visual;
 - **Aula**: mostra capa/vídeo, duração, nível/categoria, instruções, anterior/próxima e ação de conclusão. Arquivos enviados e URLs de mídia direta usam `expo-video`; links de YouTube/Vimeo são convertidos para reprodução incorporada com `react-native-webview` no Android/iOS e `iframe` na web. O carregamento possui limite de 15 segundos e, em falha, oferece nova tentativa e abertura externa em vez de manter spinner infinito;
 - **Meditação**: uma aula marcada como “prática guiada” abre o cronômetro circular com iniciar, pausar e conclusão automática. Ela é acessada pelo botão da própria aula, não por uma aba inferior;
@@ -1092,7 +1092,7 @@ O banco continua usando `Program → Module → Lesson` internamente para preser
 - `Lesson.kind = CONTENT`: aula geral;
 - `Lesson.kind = WORKOUT`: aula/exercício usada nos indicadores de treino;
 - `Lesson.kind = MEDITATION`: aula que pode abrir a prática guiada e ter vídeo opcional conforme `showMeditationButton`;
-- `Lesson.isIntroductory`: seleciona a aula para o carrossel superior da Home. No máximo três aulas publicadas/não arquivadas podem ficar marcadas.
+- `Lesson.isIntroductory`: seleciona a aula para o carrossel superior da Home. Não há limite rígido; o painel recomenda cadastrar ao menos três e permite adicionar quantas forem necessárias.
 
 ### Contratos públicos atuais
 
@@ -1114,10 +1114,10 @@ As rotas antigas `/programs`, `/programs/:id` e `/modules/:id` continuam existin
 
 ### Telas e painel
 
-- Home: carrossel horizontal de até três aulas introdutórias; abaixo, módulos com capa, nome, quantidade de aulas e progresso;
+- Home: carrossel horizontal com todas as aulas introdutórias publicadas; abaixo, módulos com capa, nome, quantidade de aulas e progresso;
 - detalhe do módulo: capa e aulas em carrossel horizontal no estilo de episódios;
 - Treinos: lista apenas programas `TRAINING`; o detalhe lista aulas/exercícios diretamente;
-- admin `/programas`: abas **Módulos da Home** e **Programas de treino**. Em ambas, a ação principal cria o item visível e depois permite adicionar aulas diretamente;
+- admin `/programas`: abas **Aulas introdutórias**, **Módulos da Home** e **Programas de treino**. A primeira funciona como uma vitrine gerenciável, com cadastro direto, escolha do módulo e suporte a três ou mais aulas. A segunda resume módulos e aulas, mantém as listas recolhidas para facilitar a leitura e oferece **Adicionar aula** no cabeçalho de cada módulo;
 - capas, vídeo por URL/upload, meditação, materiais e atraso de liberação continuam disponíveis no formulário simplificado.
 
 Ao alterar este domínio, preserve a distinção `CONTENT`/`TRAINING`, não remova o agrupamento interno sem uma migração completa de matrículas/progresso e valide os três projetos: testes do backend, build do admin e export do Expo.

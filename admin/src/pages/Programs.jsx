@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Archive, CalendarClock, Clock3, Dumbbell, Edit3, FilePlus, Layers3, Link2, Plus, Sparkles, Trash2, Upload, Video } from "lucide-react";
+import { Archive, BookOpen, CalendarClock, ChevronDown, Clock3, Dumbbell, Edit3, EyeOff, FilePlus, Home, Layers3, Link2, Plus, Sparkles, Trash2, Upload, Video } from "lucide-react";
 import api, { errorMessage } from "../services/api.js";
 import { useApi } from "../hooks/useApi.js";
 import { EmptyState, ErrorState, Loading, Modal, PageHeader, StatusBadge } from "../components/UI.jsx";
@@ -52,7 +52,8 @@ function LessonVideoPreview({ value }) {
 
 export default function Programs() {
   const { data, loading, error, reload } = useApi("/admin/programs");
-  const [section, setSection] = useState("CONTENT");
+  const [section, setSection] = useState("INTRO");
+  const [expandedItems, setExpandedItems] = useState({});
   const [editor, setEditor] = useState(null);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -62,7 +63,7 @@ export default function Programs() {
   const [uploadingMaterial, setUploadingMaterial] = useState(null);
   const [formError, setFormError] = useState("");
 
-  const programs = Array.isArray(data) ? data : [];
+  const programs = useMemo(() => Array.isArray(data) ? data : [], [data]);
   const contentModules = useMemo(() => programs
     .filter((program) => program?.type === "CONTENT")
     .flatMap((program) => (Array.isArray(program.modules) ? program.modules : [])
@@ -70,21 +71,43 @@ export default function Programs() {
   const trainingPrograms = useMemo(() => programs
     .filter((program) => program?.type === "TRAINING")
     .map((program) => ({ ...program, modules: Array.isArray(program.modules) ? program.modules : [], lessons: Array.isArray(program.lessons) ? program.lessons : [] })), [programs]);
+  const introductoryLessons = useMemo(() => contentModules.flatMap((module) => module.lessons
+    .filter((lesson) => lesson?.isIntroductory)
+    .map((lesson) => ({ ...lesson, moduleId: module.id, moduleTitle: module.title }))), [contentModules]);
+  const totalContentLessons = useMemo(() => contentModules.reduce((total, module) => total + module.lessons.length, 0), [contentModules]);
 
   const open = (entity, item = null, preset = {}) => {
     const context = preset.context || (section === "TRAINING" ? "TRAINING" : "CONTENT");
-    setEditor({ entity, id: item?.id, context });
+    setEditor({ entity, id: item?.id, context, introFlow: Boolean(preset.introFlow) });
     setForm({
       ...defaults[entity],
       ...item,
       ...preset,
       context: undefined,
+      introFlow: undefined,
       coverUrl: item?.coverUrl || "",
       videoUrl: item?.videoUrl || "",
       materials: Array.isArray(item?.materials) ? item.materials : [],
     });
     setFormError("");
   };
+
+  const openIntroductoryLesson = (lesson = null) => {
+    if (!contentModules.length) {
+      open("module", null, { context: "CONTENT" });
+      return;
+    }
+    open("lesson", lesson, {
+      context: "CONTENT",
+      introFlow: true,
+      moduleId: lesson?.moduleId || contentModules[0].id,
+      kind: lesson?.kind || "CONTENT",
+      isIntroductory: true,
+      status: lesson?.status || "PUBLISHED",
+    });
+  };
+
+  const toggleExpanded = (id) => setExpandedItems((current) => ({ ...current, [id]: !current[id] }));
 
   const submit = async (event) => {
     event.preventDefault();
@@ -179,6 +202,34 @@ export default function Programs() {
     }
   };
 
+  const removeFromIntroductory = async (lesson) => {
+    if (!window.confirm("Remover esta aula do carrossel inicial? Ela continuará disponível dentro do módulo.")) return;
+    try {
+      await api.put(`/admin/lessons/${lesson.id}`, {
+        moduleId: lesson.moduleId,
+        title: lesson.title,
+        description: lesson.description,
+        coverUrl: lesson.coverUrl || "",
+        videoUrl: lesson.videoUrl || "",
+        instructions: lesson.instructions,
+        durationMinutes: lesson.durationMinutes,
+        category: lesson.category,
+        kind: lesson.kind,
+        isIntroductory: false,
+        showMeditationButton: lesson.showMeditationButton,
+        unlockDelayHours: lesson.unlockDelayHours,
+        difficulty: lesson.difficulty,
+        sortOrder: lesson.sortOrder,
+        status: lesson.status,
+        materials: Array.isArray(lesson.materials) ? lesson.materials : [],
+        notes: lesson.notes,
+      });
+      await reload();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    }
+  };
+
   if (loading) return <Loading label="Organizando seus conteúdos..." />;
   if (error) return <ErrorState message={error} retry={reload} />;
   const items = section === "CONTENT" ? contentModules : trainingPrograms;
@@ -203,24 +254,82 @@ export default function Programs() {
     <>
       <PageHeader
         eyebrow="CATÁLOGO DO APLICATIVO"
-        title={section === "CONTENT" ? "Módulos e aulas da Home" : "Programas de treino"}
-        description={section === "CONTENT"
-          ? "Cadastre o módulo com sua capa e, dentro dele, as aulas que a aluna verá como episódios."
-          : "Cadastre cada programa de treino e adicione as aulas e exercícios diretamente, sem módulos intermediários."}
-        action={<button className="button primary" onClick={() => open(section === "CONTENT" ? "module" : "program", null, { context: section })}><Plus /> {section === "CONTENT" ? "Novo módulo" : "Novo programa de treino"}</button>}
+        title={section === "INTRO" ? "Aulas introdutórias da Home" : section === "CONTENT" ? "Módulos e aulas da Home" : "Programas de treino"}
+        description={section === "INTRO"
+          ? "Escolha as primeiras aulas da jornada. Cadastre três ou mais e elas aparecerão no carrossel inicial do aplicativo."
+          : section === "CONTENT"
+            ? "Organize os módulos, abra somente o que deseja editar e adicione aulas diretamente em cada um."
+            : "Cadastre cada programa de treino e adicione as aulas e exercícios diretamente, sem módulos intermediários."}
+        action={section === "INTRO"
+          ? <button className="button primary" onClick={() => openIntroductoryLesson()}><Plus /> {contentModules.length ? "Nova aula introdutória" : "Criar primeiro módulo"}</button>
+          : <button className="button primary" onClick={() => open(section === "CONTENT" ? "module" : "program", null, { context: section })}><Plus /> {section === "CONTENT" ? "Novo módulo" : "Novo programa de treino"}</button>}
       />
 
       <div className="content-tabs catalog-tabs" role="tablist">
+        <button className={section === "INTRO" ? "is-active" : ""} onClick={() => setSection("INTRO")}><Home /> Aulas introdutórias</button>
         <button className={section === "CONTENT" ? "is-active" : ""} onClick={() => setSection("CONTENT")}><Layers3 /> Módulos da Home</button>
         <button className={section === "TRAINING" ? "is-active" : ""} onClick={() => setSection("TRAINING")}><Dumbbell /> Programas de treino</button>
       </div>
 
-      {items.length ? (
+      {section === "INTRO" ? (
+        <section className="intro-manager">
+          <div className="intro-manager__summary">
+            <div className="intro-manager__heading">
+              <span><Sparkles /></span>
+              <div>
+                <small>VITRINE INICIAL</small>
+                <h2>Primeiras aulas da jornada</h2>
+                <p>A ordem acompanha os módulos e as aulas. Não há limite: publique quantas aulas introdutórias precisar.</p>
+              </div>
+            </div>
+            <div className="catalog-metrics">
+              <div><strong>{introductoryLessons.length}</strong><span>introdutórias</span></div>
+              <div><strong>{introductoryLessons.filter((lesson) => lesson.status === "PUBLISHED").length}</strong><span>publicadas</span></div>
+              <div><strong>{contentModules.length}</strong><span>módulos disponíveis</span></div>
+            </div>
+          </div>
+
+          {introductoryLessons.length ? (
+            <div className="intro-lesson-grid">
+              {introductoryLessons.map((lesson, index) => (
+                <article className="intro-lesson-card" key={lesson.id}>
+                  <div className="intro-lesson-card__cover" style={{ backgroundImage: lesson.coverUrl ? `url(${lesson.coverUrl})` : undefined }}>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    {!lesson.coverUrl && <BookOpen />}
+                  </div>
+                  <div className="intro-lesson-card__body">
+                    <div><StatusBadge value={lesson.status} /><small>{lesson.moduleTitle}</small></div>
+                    <h3>{lesson.title}</h3>
+                    <p>{lesson.description || "Aula introdutória da jornada."}</p>
+                    <div className="intro-lesson-card__meta"><span><Clock3 /> {lesson.durationMinutes || "—"} min</span><span>{lessonLabel(lesson)}</span></div>
+                  </div>
+                  <div className="intro-lesson-card__actions">
+                    <button className="button secondary" onClick={() => openIntroductoryLesson(lesson)}><Edit3 /> Editar aula</button>
+                    <button className="icon-button" onClick={() => removeFromIntroductory(lesson)} title="Remover apenas do carrossel"><EyeOff /></button>
+                  </div>
+                </article>
+              ))}
+              <button className="intro-lesson-add" onClick={() => openIntroductoryLesson()}><span><Plus /></span><strong>Adicionar outra aula</strong><small>Ela entrará no carrossel da Home</small></button>
+            </div>
+          ) : (
+            <EmptyState title="Cadastre as aulas introdutórias" text={contentModules.length ? "Use o botão acima para escolher o módulo e criar a primeira aula da Home." : "Crie primeiro um módulo; em seguida, você poderá adicionar três ou mais aulas introdutórias."} />
+          )}
+        </section>
+      ) : items.length ? (
+        <>
+          {section === "CONTENT" && (
+            <div className="catalog-metrics catalog-metrics--bar">
+              <div><strong>{contentModules.length}</strong><span>módulos</span></div>
+              <div><strong>{totalContentLessons}</strong><span>aulas cadastradas</span></div>
+              <div><strong>{introductoryLessons.length}</strong><span>na vitrine inicial</span></div>
+            </div>
+          )}
         <div className="program-list catalog-list">
           {items.map((item) => {
             const lessons = Array.isArray(item.lessons) ? item.lessons : [];
             const context = section;
             const entity = context === "CONTENT" ? "module" : "program";
+            const expanded = Boolean(expandedItems[item.id]);
             return (
               <article className="program-card catalog-card" key={item.id}>
                 <header>
@@ -233,7 +342,8 @@ export default function Programs() {
                       <small className="catalog-release"><CalendarClock /> Libera {item.unlockDelayDays} dia{item.unlockDelayDays === 1 ? "" : "s"} após concluir o módulo anterior</small>
                     )}
                   </div>
-                  <div className="row-actions">
+                  <div className="catalog-card-actions">
+                    <button className="button secondary" onClick={() => open("lesson", null, context === "CONTENT" ? { moduleId: item.id, kind: "CONTENT", context } : { programId: item.id, kind: "WORKOUT", context })}><Plus /> Adicionar aula</button>
                     <button className="icon-button" onClick={() => open(entity, item, { context })} title="Editar"><Edit3 /></button>
                     <button className="icon-button danger" onClick={() => archive(entity, item.id)} title="Arquivar"><Archive /></button>
                   </div>
@@ -241,17 +351,18 @@ export default function Programs() {
                 <div className="modules-admin catalog-lessons">
                   <div className="modules-admin__heading">
                     <strong>{context === "CONTENT" ? "Aulas do módulo" : "Aulas e exercícios"}</strong>
-                    <button className="button ghost" onClick={() => open("lesson", null, context === "CONTENT" ? { moduleId: item.id, kind: "CONTENT", context } : { programId: item.id, kind: "WORKOUT", context })}><Plus /> Adicionar aula</button>
+                    <button className={`button ghost catalog-expand ${expanded ? "is-open" : ""}`} onClick={() => toggleExpanded(item.id)}>{expanded ? "Ocultar aulas" : `Ver ${lessons.length} aula${lessons.length === 1 ? "" : "s"}`} <ChevronDown /></button>
                   </div>
-                  <div className="lesson-admin-list">
+                  {expanded && <div className="lesson-admin-list">
                     {lessons.map((lesson) => renderLesson(lesson, context, item.id))}
                     {!lessons.length && <div className="materials-empty">Nenhuma aula cadastrada ainda.</div>}
-                  </div>
+                  </div>}
                 </div>
               </article>
             );
           })}
         </div>
+        </>
       ) : <EmptyState title={section === "CONTENT" ? "Crie o primeiro módulo da Home" : "Crie o primeiro programa de treino"} text="Depois, adicione as aulas diretamente dentro dele." />}
 
       {editor && (
@@ -271,8 +382,14 @@ export default function Programs() {
 
             {editor.entity === "lesson" && (
               <>
+                {editor.context === "CONTENT" && editor.introFlow && (
+                  <>
+                    <div className="full intro-form-notice"><Sparkles /><div><strong>Aula introdutória da Home</strong><small>Ela aparecerá no carrossel inicial. Você pode cadastrar três ou mais aulas.</small></div></div>
+                    <label className="full"><span>Módulo da aula</span><select value={form.moduleId || ""} onChange={(event) => setForm({ ...form, moduleId: event.target.value })} required><option value="">Selecione o módulo</option>{contentModules.map((module) => <option value={module.id} key={module.id}>{module.title}</option>)}</select><small className="muted">A aula também ficará disponível dentro deste módulo.</small></label>
+                  </>
+                )}
                 {editor.context === "CONTENT" && <label><span>Tipo de aula</span><select value={form.kind || "CONTENT"} onChange={(event) => setForm({ ...form, kind: event.target.value, showMeditationButton: event.target.value === "MEDITATION" })}><option value="CONTENT">Aula geral</option><option value="MEDITATION">Meditação</option><option value="WORKOUT">Aula com exercício</option></select></label>}
-                {editor.context === "CONTENT" && <label className="catalog-highlight-toggle"><input type="checkbox" checked={Boolean(form.isIntroductory)} onChange={(event) => setForm({ ...form, isIntroductory: event.target.checked })} /><span><strong>Mostrar nas aulas introdutórias</strong><small>Até 3 aulas podem aparecer no carrossel do topo da Home.</small></span></label>}
+                {editor.context === "CONTENT" && !editor.introFlow && <label className="catalog-highlight-toggle"><input type="checkbox" checked={Boolean(form.isIntroductory)} onChange={(event) => setForm({ ...form, isIntroductory: event.target.checked })} /><span><strong>Mostrar nas aulas introdutórias</strong><small>Inclui esta aula no carrossel da Home. Você também pode gerenciar tudo na aba Aulas introdutórias.</small></span></label>}
                 {form.kind === "MEDITATION" && <label><span>Acesso à meditação</span><select value={form.showMeditationButton ? "GUIDED" : "VIDEO"} onChange={(event) => setForm({ ...form, showMeditationButton: event.target.value === "GUIDED" })}><option value="GUIDED">Abrir prática guiada (vídeo opcional)</option><option value="VIDEO">Somente vídeo</option></select></label>}
                 <label><span>Duração (min)</span><input type="number" min="1" value={form.durationMinutes || ""} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} /></label>
                 <label><span>Nível</span><select value={form.difficulty || "Iniciante"} onChange={(event) => setForm({ ...form, difficulty: event.target.value })}><option>Iniciante</option><option>Intermediário</option><option>Avançado</option><option>Todos os níveis</option></select></label>

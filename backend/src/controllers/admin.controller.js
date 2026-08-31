@@ -63,7 +63,7 @@ const ensureTrainingModule = async (tx, programId) => {
 
 const validateIntroductoryLesson = async (
   tx,
-  { moduleId, isIntroductory, excludeLessonId },
+  { moduleId, isIntroductory },
 ) => {
   if (!isIntroductory) return;
   const module = await tx.module.findUnique({
@@ -72,16 +72,6 @@ const validateIntroductoryLesson = async (
   });
   if (module?.program.type !== "CONTENT")
     throw new AppError(422, "Somente aulas dos módulos da Home podem ser introdutórias.");
-  const total = await tx.lesson.count({
-    where: {
-      module: { program: { type: "CONTENT" } },
-      isIntroductory: true,
-      status: { not: "ARCHIVED" },
-      ...(excludeLessonId ? { id: { not: excludeLessonId } } : {}),
-    },
-  });
-  if (total >= 3)
-    throw new AppError(422, "A Home aceita no máximo 3 aulas introdutórias.");
 };
 
 const assignPublishedProgramToAllStudents = async (tx, programId) => {
@@ -633,7 +623,6 @@ export const updateLesson = async (req, res) => {
     await validateIntroductoryLesson(tx, {
       moduleId,
       isIntroductory: lessonInput.isIntroductory,
-      excludeLessonId: current.id,
     });
     return tx.lesson.update({
       where: { id: current.id },
