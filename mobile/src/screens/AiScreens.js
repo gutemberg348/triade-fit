@@ -3,6 +3,7 @@ import {
   Alert,
   Animated,
   Image,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -118,6 +119,7 @@ export function CaloriesScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
+  const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -132,6 +134,7 @@ export function CaloriesScreen() {
   useFocusEffect(useCallback(() => void load(), [load]));
 
   const select = async (camera = false) => {
+    setPhotoMenuOpen(false);
     const selected = camera ? await takePhoto() : await chooseFromLibrary(false);
     if (selected) {
       setAsset(selected);
@@ -217,10 +220,11 @@ export function CaloriesScreen() {
                 <Pressable style={styles.removeAttachment} onPress={() => setAsset(null)}><X size={17} color={colors.text} /></Pressable>
               </View>
             ) : (
-              <View style={styles.captureActions}>
-                <Pressable style={styles.captureButton} onPress={() => select(true)}><Camera size={21} color={colors.primaryLight} /><Text style={styles.captureButtonTitle}>Tirar foto</Text><Text style={styles.captureButtonText}>Use a câmera agora</Text></Pressable>
-                <Pressable style={styles.captureButton} onPress={() => select(false)}><ImagePlus size={21} color={colors.primaryLight} /><Text style={styles.captureButtonTitle}>Galeria</Text><Text style={styles.captureButtonText}>Escolha uma imagem</Text></Pressable>
-              </View>
+              <Pressable style={styles.captureMainButton} onPress={() => setPhotoMenuOpen(true)}>
+                <View style={styles.captureMainIcon}><Camera size={22} color={colors.text} /></View>
+                <View style={{ flex: 1 }}><Text style={styles.captureMainTitle}>Aperte aqui para adicionar a foto</Text><Text style={styles.captureMainText}>Depois escolha câmera ou galeria</Text></View>
+                <ChevronRight size={20} color={colors.primaryLight} />
+              </Pressable>
             )}
             <Text style={styles.quantityLabel}>QUANTO VOCÊ CONSUMIU?</Text>
             <TextInput style={styles.noteInput} value={note} onChangeText={setNote} placeholder="Ex.: 2 fatias, 100 g, metade ou 1 unidade" placeholderTextColor={colors.subtle} />
@@ -246,6 +250,27 @@ export function CaloriesScreen() {
           )) : <Empty title="Nenhum alimento hoje" text="Envie a primeira foto para começar o contador." />}
         </>
       )}
+      <Modal transparent visible={photoMenuOpen} animationType="fade" onRequestClose={() => setPhotoMenuOpen(false)}>
+        <View style={styles.photoMenuLayer}>
+          <Pressable style={styles.photoMenuBackdrop} onPress={() => setPhotoMenuOpen(false)} />
+          <View style={styles.photoMenuCard}>
+            <View style={styles.photoMenuHandle} />
+            <Text style={styles.photoMenuEyebrow}>FOTO DO ALIMENTO</Text>
+            <Text style={styles.photoMenuTitle}>Como deseja adicionar?</Text>
+            <Pressable style={styles.photoMenuOption} onPress={() => select(true)}>
+              <View style={styles.photoMenuIcon}><Camera size={21} color={colors.text} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.photoMenuOptionTitle}>Tirar foto agora</Text><Text style={styles.photoMenuOptionText}>Abra a câmera e fotografe o alimento</Text></View>
+              <ChevronRight size={19} color={colors.subtle} />
+            </Pressable>
+            <Pressable style={styles.photoMenuOption} onPress={() => select(false)}>
+              <View style={styles.photoMenuIcon}><ImagePlus size={21} color={colors.text} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.photoMenuOptionTitle}>Escolher da galeria</Text><Text style={styles.photoMenuOptionText}>Use uma foto que já está no celular</Text></View>
+              <ChevronRight size={19} color={colors.subtle} />
+            </Pressable>
+            <Pressable style={styles.photoMenuCancel} onPress={() => setPhotoMenuOpen(false)}><Text style={styles.photoMenuCancelText}>Cancelar</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -339,7 +364,7 @@ export function TrainingAssistantScreen({ navigation }) {
       ) : <View style={styles.chatWelcome}><Sparkles size={22} color={colors.primaryLight} /><Text style={styles.chatWelcomeTitle}>Qual exercício precisa adaptar?</Text><Text style={styles.chatWelcomeText}>Conte a limitação que deve ser respeitada e como o movimento é feito hoje.</Text></View>}
 
       <View style={styles.composer}>
-        {asset ? <View style={styles.attachmentPreview}>{video ? <Video size={23} color={colors.primaryLight} /> : <Image source={{ uri: asset.uri }} style={styles.attachmentImage} />}<View style={{ flex: 1 }}><Text style={styles.attachmentTitle}>{video ? "Vídeo pronto" : "Foto pronta"}</Text><Text style={styles.attachmentText}>{video ? "A Luna analisará até 5 quadros do movimento." : "A imagem será enviada junto da dúvida."}</Text></View><Pressable onPress={() => setAsset(null)}><X size={18} color={colors.text} /></Pressable></View> : null}
+        {asset ? <View style={styles.attachmentPreview}>{video ? <Video size={23} color={colors.primaryLight} /> : <Image source={{ uri: asset.uri }} style={styles.attachmentImage} />}<View style={{ flex: 1 }}><Text style={styles.attachmentTitle}>{video ? "Vídeo pronto" : "Foto pronta"}</Text><Text style={styles.attachmentText}>{video ? "A Luna analisará até 8 quadros distribuídos por toda a execução." : "A imagem será enviada junto da dúvida."}</Text></View><Pressable onPress={() => setAsset(null)}><X size={18} color={colors.text} /></Pressable></View> : null}
         <TextInput multiline textAlignVertical="top" style={styles.messageInput} value={message} onChangeText={setMessage} placeholder="Ex.: tenho limitação no joelho. Como faço o polichinelo sem saltar?" placeholderTextColor={colors.subtle} />
         <View style={styles.composerActions}>
           <Pressable style={styles.attachButton} onPress={() => attach(true)}><Camera size={18} color={colors.primaryLight} /><Text style={styles.attachText}>Foto</Text></Pressable>
@@ -373,10 +398,10 @@ const styles = StyleSheet.create({
   captureHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   sectionEyebrow: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 8, letterSpacing: 1.25 },
   sectionTitle: { marginTop: 3, color: colors.text, fontFamily: fonts.display, fontSize: 21, lineHeight: 27 },
-  captureActions: { flexDirection: "row", gap: 10 },
-  captureButton: { flex: 1, minHeight: 112, padding: 13, justifyContent: "center", borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.input, backgroundColor: colors.surface2 },
-  captureButtonTitle: { marginTop: 8, color: colors.text, fontFamily: fonts.bold, fontSize: 12 },
-  captureButtonText: { marginTop: 2, color: colors.subtle, fontSize: 8 },
+  captureMainButton: { minHeight: 82, padding: 13, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderStyle: "dashed", borderColor: colors.primaryLight, borderRadius: radii.input, backgroundColor: colors.surface2 },
+  captureMainIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primary },
+  captureMainTitle: { color: colors.text, fontFamily: fonts.bold, fontSize: 12, lineHeight: 17 },
+  captureMainText: { marginTop: 3, color: colors.subtle, fontSize: 9 },
   foodPreviewWrap: { position: "relative" },
   foodPreview: { width: "100%", height: 190, borderRadius: radii.input },
   removeAttachment: { position: "absolute", top: 10, right: 10, width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "rgba(10,7,6,.82)" },
@@ -386,6 +411,18 @@ const styles = StyleSheet.create({
   aiAction: { minHeight: 52, marginTop: 11, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 15, backgroundColor: colors.primaryLight },
   aiActionText: { color: colors.text, fontFamily: fonts.bold, fontSize: 12 },
   disclaimer: { marginTop: 9, color: colors.subtle, fontSize: 8, lineHeight: 13, textAlign: "center" },
+  photoMenuLayer: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,.66)" },
+  photoMenuBackdrop: { position: "absolute", inset: 0 },
+  photoMenuCard: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
+  photoMenuHandle: { alignSelf: "center", width: 38, height: 4, marginBottom: 18, borderRadius: 3, backgroundColor: colors.line },
+  photoMenuEyebrow: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 8, letterSpacing: 1.2 },
+  photoMenuTitle: { marginTop: 4, marginBottom: 14, color: colors.text, fontFamily: fonts.display, fontSize: 22 },
+  photoMenuOption: { minHeight: 70, marginBottom: 10, padding: 12, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: colors.line, borderRadius: 17, backgroundColor: colors.surface2 },
+  photoMenuIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: colors.primary },
+  photoMenuOptionTitle: { color: colors.text, fontFamily: fonts.bold, fontSize: 11 },
+  photoMenuOptionText: { marginTop: 3, color: colors.subtle, fontSize: 8 },
+  photoMenuCancel: { minHeight: 46, marginTop: 3, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  photoMenuCancelText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 11 },
   actionError: { marginTop: 10, color: colors.danger, fontFamily: fonts.semibold, fontSize: 10, lineHeight: 15 },
   actionNotice: { marginTop: 10, color: colors.success, fontFamily: fonts.semibold, fontSize: 10, lineHeight: 15 },
   listHeading: { marginTop: 25, marginBottom: 11, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

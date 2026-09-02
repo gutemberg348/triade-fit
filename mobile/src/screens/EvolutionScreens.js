@@ -548,6 +548,8 @@ export function AddMeasurementScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showDate, setShowDate] = useState(false);
+  const [photos, setPhotos] = useState({ FRONT: null, SIDE: null, BACK: null });
+  const [activePhotoPose, setActivePhotoPose] = useState("FRONT");
   const completeFields = useMemo(
     () => measurementFieldKeys.filter((key) => form[key] !== "").length,
     [form],
@@ -557,6 +559,28 @@ export function AddMeasurementScreen({ navigation, route }) {
     ? additionalMeasurementGroups.map((group) => ({ ...group, fields: group.fields.filter(([key]) => key !== "heightCm") }))
     : additionalMeasurementGroups;
   const update = (key, value) => setForm((old) => ({ ...old, [key]: value }));
+  const photoCount = Object.values(photos).filter(Boolean).length;
+  const chooseMeasurementPhoto = async (source) => {
+    setError("");
+    if (source === "camera") {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) return setError("Permita o acesso à câmera para tirar sua foto.");
+    }
+    const launcher = source === "camera" ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    const result = await launcher({ mediaTypes: ["images"], allowsEditing: false, quality: 0.8 });
+    if (!result.canceled) setPhotos((current) => ({ ...current, [activePhotoPose]: result.assets[0] }));
+  };
+  const uploadMeasurementPhoto = async (asset, pose) => {
+    const body = new FormData();
+    const name = asset.fileName || `evolucao-${pose.toLowerCase()}-${Date.now()}.jpg`;
+    if (Platform.OS === "web" && asset.file) body.append("image", asset.file, name);
+    else body.append("image", { uri: asset.uri, name, type: asset.mimeType || "image/jpeg" });
+    const { data } = await api.post("/uploads", body, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+    return data.url;
+  };
   const submit = async () => {
     if (isInitial && (!form.weightKg || !form.heightCm)) {
       setError("Informe seu peso e sua altura para criar o ponto de partida. A gordura corporal é opcional.");
@@ -569,7 +593,17 @@ export function AddMeasurementScreen({ navigation, route }) {
     setSaving(true);
     setError("");
     try {
+      const selectedPhotos = Object.entries(photos).filter(([, asset]) => asset);
+      const uploadedPhotos = await Promise.all(selectedPhotos.map(async ([pose, asset]) => ({
+        pose,
+        photoUrl: await uploadMeasurementPhoto(asset, pose),
+      })));
       await api.post("/measurements", form);
+      await Promise.all(uploadedPhotos.map((photo) => api.post("/progress-photos", {
+        ...photo,
+        takenAt: form.measuredAt,
+        notes: form.notes || null,
+      })));
       navigation.goBack();
     } catch (err) {
       setError(messageFrom(err));
@@ -631,8 +665,32 @@ export function AddMeasurementScreen({ navigation, route }) {
         <Text style={styles.measureGroupTitle}>Observações</Text>
         <TextInput style={styles.notesInput} multiline textAlignVertical="top" value={form.notes} onChangeText={(value) => update("notes", value)} placeholder="Como você se sentiu? Houve algo diferente hoje?" placeholderTextColor={colors.subtle} />
       </View>}
+      <View style={styles.measurePhotoCard}>
+        <View style={styles.measurePhotoHeader}>
+          <View style={styles.measurePhotoIcon}><Camera size={19} color={colors.primaryLight} /></View>
+          <View style={{ flex: 1 }}><View style={styles.measurePhotoTitleRow}><Text style={styles.measureGroupTitle}>Fotos desta avaliação</Text><Text style={styles.optionalPill}>OPCIONAL</Text></View><Text style={styles.measureGroupDescription}>Adicione frente, lado ou costas agora. Você também pode fazer isso depois.</Text></View>
+        </View>
+        <View style={styles.measurePhotoPoses}>
+          {photoPoses.map((pose) => {
+            const asset = photos[pose.key];
+            const active = activePhotoPose === pose.key;
+            return (
+              <Pressable key={pose.key} onPress={() => setActivePhotoPose(pose.key)} style={[styles.measurePhotoPose, active && styles.measurePhotoPoseActive]}>
+                {asset ? <Image source={{ uri: asset.uri }} style={styles.measurePhotoThumb} /> : <Camera size={17} color={active ? colors.primaryLight : colors.subtle} />}
+                <Text style={[styles.measurePhotoPoseText, active && styles.measurePhotoPoseTextActive]}>{pose.label}</Text>
+                {asset ? <View style={styles.measurePhotoCheck}><Check size={10} color={colors.ink} strokeWidth={3} /></View> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.measurePhotoHint}>{photoCount ? `${photoCount} foto${photoCount === 1 ? "" : "s"} pronta${photoCount === 1 ? "" : "s"}` : `Adicionar foto de ${photoPoses.find((pose) => pose.key === activePhotoPose)?.label.toLowerCase()}`}</Text>
+        <View style={styles.measurePhotoActions}>
+          <Pressable style={styles.measurePhotoPrimary} onPress={() => chooseMeasurementPhoto("camera")}><Camera size={17} color={colors.ink} /><Text style={styles.measurePhotoPrimaryText}>Tirar foto</Text></Pressable>
+          <Pressable style={styles.measurePhotoSecondary} onPress={() => chooseMeasurementPhoto("gallery")}><ImagePlus size={17} color={colors.primaryLight} /><Text style={styles.measurePhotoSecondaryText}>Galeria</Text></Pressable>
+        </View>
+      </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button title={saving ? "Salvando..." : "Salvar avaliação"} icon={Scale} onPress={submit} disabled={saving} />
+      <View style={styles.formSubmit}><Button title={saving ? "Salvando..." : photoCount ? `Salvar avaliação e ${photoCount} foto${photoCount === 1 ? "" : "s"}` : "Salvar avaliação"} icon={Scale} onPress={submit} disabled={saving} /></View>
     </Screen>
   );
 }
@@ -735,7 +793,7 @@ const styles = StyleSheet.create({
   initialMeasurementBenefit: { flexDirection: "row", alignItems: "center", gap: 9 },
   initialMeasurementDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
   initialMeasurementBenefitText: { flex: 1, color: colors.text, fontFamily: fonts.medium, fontSize: 11, lineHeight: 16 },
-  initialMeasurementActions: { gap: 6 },
+  initialMeasurementActions: { gap: 12 },
   skipMeasurement: { minHeight: 43, alignItems: "center", justifyContent: "center", borderRadius: 13 },
   skipMeasurementText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 12 },
   lifetimeCard: { marginBottom: 10, padding: 17, borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: radii.card, backgroundColor: colors.surface },
@@ -884,6 +942,24 @@ const styles = StyleSheet.create({
   fieldUnit: { color: colors.subtle, fontSize: 10, fontWeight: "800" },
   notesCard: { marginTop: 14, padding: 15, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   notesInput: { minHeight: 91, marginTop: 9, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 13, color: colors.text, fontSize: 12, lineHeight: 18, backgroundColor: colors.surface2 },
+  measurePhotoCard: { marginTop: 18, padding: 15, borderWidth: 1, borderColor: "rgba(245,179,141,.34)", borderRadius: radii.card, backgroundColor: colors.surface },
+  measurePhotoHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
+  measurePhotoIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: colors.surface3 },
+  measurePhotoTitleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7 },
+  measurePhotoPoses: { marginTop: 14, flexDirection: "row", gap: 9 },
+  measurePhotoPose: { position: "relative", flex: 1, height: 82, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 15, backgroundColor: colors.surface2 },
+  measurePhotoPoseActive: { borderColor: colors.primaryLight, backgroundColor: "rgba(245,179,141,.09)" },
+  measurePhotoThumb: { position: "absolute", width: "100%", height: "100%", opacity: 0.54 },
+  measurePhotoPoseText: { paddingHorizontal: 6, paddingVertical: 3, overflow: "hidden", color: colors.subtle, fontFamily: fonts.bold, fontSize: 9, borderRadius: 7, backgroundColor: "rgba(9,6,5,.7)" },
+  measurePhotoPoseTextActive: { color: colors.text },
+  measurePhotoCheck: { position: "absolute", top: 6, right: 6, width: 18, height: 18, alignItems: "center", justifyContent: "center", borderRadius: 9, backgroundColor: colors.success },
+  measurePhotoHint: { marginTop: 12, color: colors.muted, fontFamily: fonts.semibold, fontSize: 9 },
+  measurePhotoActions: { marginTop: 9, flexDirection: "row", gap: 12 },
+  measurePhotoPrimary: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 14, backgroundColor: colors.primaryLight },
+  measurePhotoPrimaryText: { color: colors.ink, fontFamily: fonts.bold, fontSize: 10 },
+  measurePhotoSecondary: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
+  measurePhotoSecondaryText: { color: colors.text, fontFamily: fonts.bold, fontSize: 10 },
+  formSubmit: { marginTop: 18, marginBottom: 8 },
   error: { marginVertical: 12, color: colors.danger, fontSize: 12, fontWeight: "700" },
   photoFormHero: { marginBottom: 14, padding: 15, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
   photoFormHeroIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(232,136,91,.16)" },

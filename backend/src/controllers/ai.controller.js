@@ -105,13 +105,16 @@ export const trainingAdvice = async (req, res) => {
     orderBy: { createdAt: "desc" },
     take: 8,
   });
-  const answer = await createTrainingAdvice({
+  const advice = await createTrainingAdvice({
     studentId: req.user.studentId,
     message: req.body.message,
     imageUrl: req.body.imageUrl,
     videoUrl: req.body.videoUrl,
     history: history.reverse(),
   });
+  const answer = req.body.videoUrl
+    ? `Vídeo analisado em ${advice.framesAnalyzed} quadros distribuídos pela execução.\n\n${advice.text}`
+    : advice.text;
   const [userMessage, assistantMessage] = await prisma.$transaction([
     prisma.trainingAiMessage.create({
       data: {

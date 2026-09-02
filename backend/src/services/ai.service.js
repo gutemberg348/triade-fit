@@ -4,11 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import ffmpegStatic from "ffmpeg-static";
 import OpenAI from "openai";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
 
 const execFileAsync = promisify(execFile);
+const ffmpegCommand = process.env.FFMPEG_PATH || (process.platform === "win32" ? ffmpegStatic : "ffmpeg");
 const uploadRoot = path.resolve("uploads");
 const imageMime = new Map([
   [".jpg", "image/jpeg"],
@@ -147,17 +149,35 @@ const videoFrames = async (videoUrl) => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "triade-ai-"));
   const pattern = path.join(temporary, "frame-%02d.jpg");
   try {
+    let metadata = "";
+    try {
+      await execFileAsync(ffmpegCommand, ["-hide_banner", "-i", input], {
+        timeout: 15000,
+        maxBuffer: 1024 * 1024,
+      });
+    } catch (error) {
+      if (error?.code === "ENOENT") throw error;
+      metadata = String(error?.stderr || "");
+    }
+    const durationMatch = metadata.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
+    const duration = durationMatch
+      ? Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3])
+      : Number.NaN;
+    if (!Number.isFinite(duration) || duration <= 0)
+      throw new AppError(422, "Não foi possível identificar a duração desse vídeo.");
+    const frameTarget = 8;
+    const framesPerSecond = Math.max(frameTarget / duration, 0.05);
     await execFileAsync(
-      "ffmpeg",
-      ["-loglevel", "error", "-i", input, "-vf", "fps=1/4,scale=768:-2", "-frames:v", "5", "-q:v", "3", pattern],
-      { timeout: 60000, maxBuffer: 1024 * 1024 },
+      ffmpegCommand,
+      ["-loglevel", "error", "-i", input, "-vf", `fps=${framesPerSecond},scale=960:-2`, "-frames:v", String(frameTarget), "-q:v", "3", pattern],
+      { timeout: 90000, maxBuffer: 2 * 1024 * 1024 },
     );
     const frames = (await fs.readdir(temporary))
       .filter((file) => file.endsWith(".jpg"))
       .sort()
-      .slice(0, 5);
-    if (!frames.length)
-      throw new AppError(422, "Não foi possível enxergar quadros nesse vídeo.");
+      .slice(0, frameTarget);
+    if (frames.length < 2)
+      throw new AppError(422, "O vídeo não mostrou movimento suficiente. Envie um vídeo um pouco mais longo e com o corpo visível.");
     const images = await Promise.all(frames.map((file) => imageDataUrl(path.join(temporary, file))));
     return { images, cleanup: () => fs.rm(temporary, { recursive: true, force: true }) };
   } catch (error) {
@@ -175,6 +195,12 @@ export const createTrainingAdvice = async ({ studentId, message, imageUrl, video
   const historyText = history.length
     ? history.map((item) => `${item.role === "ASSISTANT" ? "Luna" : "Aluna"}: ${item.message}`).join("\n")
     : "Sem conversa anterior.";
+  const mediaContent = videoUrl
+    ? images.flatMap((image, index) => [
+        { type: "input_text", text: `Quadro ${index + 1} de ${images.length}, extraído em ordem cronológica do vídeo.` },
+        { type: "input_image", image_url: image, detail: "high" },
+      ])
+    : images.map((image) => ({ type: "input_image", image_url: image, detail: "high" }));
   try {
     const response = await createResponse({
       model: env.OPENAI_MODEL,
@@ -183,16 +209,16 @@ export const createTrainingAdvice = async ({ studentId, message, imageUrl, video
       max_output_tokens: 1800,
       safety_identifier: safetyIdentifier(studentId),
       instructions:
-        "Você é Luna, assistente de treino da Triade FIT. Responda em português do Brasil, de forma curta, prática e gentil. A aluna pode estar pedindo uma adaptação por causa de uma limitação já conhecida, mesmo sem sentir dor agora. Nesse caso, não trate automaticamente como emergência: identifique o impacto do exercício e ensine uma versão de baixo impacto em passos simples. Exemplo: para adaptar um polichinelo a uma limitação no joelho, mantenha os pés no chão, mova os braços e, se for confortável, alterne passos laterais sem salto; também ofereça a opção de fazer somente os braços, em pé ou sentada. Nunca oriente insistir através da dor. Diferencie limitação conhecida de dor aguda atual. Se houver dor durante o movimento, trauma, inchaço, perda de força ou incapacidade funcional importante, oriente interromper o exercício e buscar avaliação profissional. Analise somente o que estiver visível e diga quando a imagem ou os quadros não forem suficientes. Você não diagnostica lesões nem substitui personal, fisioterapeuta ou médico. Ao sugerir uma troca, dê uma opção conservadora e explique exatamente como executar. Se o exercício ou a limitação não estiverem claros, faça uma única pergunta curta antes de orientar.",
+        "Você é Luna, assistente de treino da Triade FIT. Responda em português do Brasil, de forma curta, prática e gentil. Quando receber vários quadros numerados, trate-os como uma sequência cronológica extraída de um vídeo: compare início, meio e fim do movimento, observe apoio dos pés, alinhamento aparente, amplitude, estabilidade e ritmo que forem realmente visíveis. Cite primeiro o que conseguiu observar no vídeo e depois dê até três ajustes objetivos. Nunca afirme que não viu o vídeo quando quadros numerados estiverem presentes; explique apenas limitações específicas de ângulo, enquadramento ou quadros, se existirem. A aluna pode estar pedindo uma adaptação por causa de uma limitação já conhecida, mesmo sem sentir dor agora. Nesse caso, não trate automaticamente como emergência: identifique o impacto do exercício e ensine uma versão de baixo impacto em passos simples. Exemplo: para adaptar um polichinelo a uma limitação no joelho, mantenha os pés no chão, mova os braços e, se for confortável, alterne passos laterais sem salto; também ofereça a opção de fazer somente os braços, em pé ou sentada. Nunca oriente insistir através da dor. Diferencie limitação conhecida de dor aguda atual. Se houver dor durante o movimento, trauma, inchaço, perda de força ou incapacidade funcional importante, oriente interromper o exercício e buscar avaliação profissional. Analise somente o que estiver visível. Você não diagnostica lesões nem substitui personal, fisioterapeuta ou médico. Ao sugerir uma troca, dê uma opção conservadora e explique exatamente como executar. Se o exercício ou a limitação não estiverem claros, faça uma única pergunta curta antes de orientar.",
       input: [{
         role: "user",
         content: [
           { type: "input_text", text: `Histórico recente:\n${historyText}\n\nPedido atual: ${message || "Analise minha execução e dê orientações seguras."}` },
-          ...images.map((image) => ({ type: "input_image", image_url: image, detail: "high" })),
+          ...mediaContent,
         ],
       }],
     });
-    return responseText(response);
+    return { text: responseText(response), framesAnalyzed: videoUrl ? images.length : 0 };
   } finally {
     await cleanup();
   }

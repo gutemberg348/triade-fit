@@ -20,6 +20,17 @@ import api, { messageFrom } from "../services/api.js";
 import { Empty, ErrorBox, Loading, Screen } from "../components/UI.js";
 import { colors, fonts, radii } from "../theme/index.js";
 
+const commentThreads = (comments = []) => {
+  const nodes = new Map(comments.map((comment) => [comment.id, { ...comment, replies: [] }]));
+  const roots = [];
+  nodes.forEach((comment) => {
+    const parent = comment.parentId ? nodes.get(comment.parentId) : null;
+    if (parent && parent.id !== comment.id) parent.replies.push(comment);
+    else roots.push(comment);
+  });
+  return roots;
+};
+
 export default function NoticeScreen() {
   const [activeTab, setActiveTab] = useState("feed");
   const [likingId, setLikingId] = useState("");
@@ -278,8 +289,8 @@ export default function NoticeScreen() {
                 showsVerticalScrollIndicator={false}
               >
                 {conversation.tab === "comments" ? (
-                  conversation.comments.length ? conversation.comments.map((comment) => (
-                    <CommentItem key={comment.id} item={comment} onReply={startReply} />
+                  conversation.comments.length ? commentThreads(conversation.comments).map((comment) => (
+                    <CommentThread key={comment.id} item={comment} onReply={startReply} />
                   )) : (
                     <View style={styles.emptyConversation}>
                       <MessageCircle size={28} color={colors.primaryLight} />
@@ -357,24 +368,27 @@ function ProfileAvatar({ name, uri, small = false }) {
   );
 }
 
-function CommentItem({ item, onReply }) {
+function CommentThread({ item, onReply, depth = 0 }) {
   return (
-    <View style={[styles.commentRow, item.parentId && styles.commentReply]}>
-      <ProfileAvatar name={item.author.name} uri={item.author.avatarUrl} small />
-      <View style={styles.commentBody}>
-        <View style={styles.commentBubble}>
-          <Text style={styles.commentAuthor}>{item.author.name}{item.isMine ? " · você" : ""}</Text>
-          {item.replyTo ? <Text style={styles.replyContext}>Em resposta a {item.replyTo.author.name}</Text> : null}
-          <Text style={styles.commentMessage}>{item.message}</Text>
-        </View>
-        <View style={styles.commentMeta}>
-          <Text style={styles.commentDate}>{formatCommentDate(item.createdAt)}</Text>
-          <Pressable style={styles.replyButton} onPress={() => onReply(item)}>
-            <Reply size={12} color={colors.primaryLight} />
-            <Text style={styles.replyButtonText}>Responder</Text>
-          </Pressable>
+    <View>
+      <View style={[styles.commentRow, depth > 0 && { marginLeft: Math.min(depth, 3) * 24 }]}>
+        <ProfileAvatar name={item.author.name} uri={item.author.avatarUrl} small />
+        <View style={styles.commentBody}>
+          <View style={[styles.commentBubble, depth > 0 && styles.commentReplyBubble]}>
+            <Text style={styles.commentAuthor}>{item.author.name}{item.isMine ? " · você" : ""}</Text>
+            {item.replyTo ? <Text style={styles.replyContext}>Em resposta a {item.replyTo.author.name}</Text> : null}
+            <Text style={styles.commentMessage}>{item.message}</Text>
+          </View>
+          <View style={styles.commentMeta}>
+            <Text style={styles.commentDate}>{formatCommentDate(item.createdAt)}</Text>
+            <Pressable style={styles.replyButton} onPress={() => onReply(item)}>
+              <Reply size={12} color={colors.primaryLight} />
+              <Text style={styles.replyButtonText}>Responder</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
+      {item.replies.map((reply) => <CommentThread key={reply.id} item={reply} onReply={onReply} depth={depth + 1} />)}
     </View>
   );
 }
@@ -550,11 +564,11 @@ const styles = StyleSheet.create({
   emptyConversationTitle: { marginTop: 11, color: colors.text, fontFamily: fonts.display, fontSize: 20 },
   emptyConversationText: { marginTop: 5, maxWidth: 260, color: colors.muted, fontSize: 10, lineHeight: 16, textAlign: "center" },
   commentRow: { marginBottom: 13, flexDirection: "row", alignItems: "flex-start", gap: 9 },
-  commentReply: { marginLeft: 30 },
   commentAvatar: { width: 34, height: 34, borderRadius: 17 },
   commentAvatarText: { fontSize: 12 },
   commentBody: { flex: 1 },
   commentBubble: { padding: 11, borderWidth: 1, borderColor: colors.line, borderRadius: 15, borderTopLeftRadius: 5, backgroundColor: colors.surface },
+  commentReplyBubble: { borderColor: "rgba(232,136,91,.38)", backgroundColor: colors.surface2 },
   commentAuthor: { color: colors.text, fontFamily: fonts.bold, fontSize: 10 },
   replyContext: { marginTop: 2, color: colors.primaryLight, fontSize: 8 },
   commentMessage: { marginTop: 5, color: colors.muted, fontSize: 11, lineHeight: 17 },
