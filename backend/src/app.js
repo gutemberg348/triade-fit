@@ -12,6 +12,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import billingRoutes from "./routes/billing.routes.js";
 import appConfigRoutes from "./routes/app-config.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
 import { errorHandler, notFound } from "./middlewares/errorHandler.js";
 import { AppError } from "./utils/AppError.js";
 
@@ -60,6 +61,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api", appConfigRoutes);
+app.use("/api", aiRoutes);
 app.use(notFound);
 app.use(errorHandler);
 export default app;

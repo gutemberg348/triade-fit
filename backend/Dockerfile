@@ -20,6 +20,9 @@ FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+# A Luna recebe imagens, não vídeo direto. O ffmpeg extrai quadros dos vídeos de treino.
+RUN apk add --no-cache ffmpeg
+
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/backend ./backend

@@ -24,6 +24,8 @@ const schema = z.object({
   ASAAS_API_KEY: optionalSecret(),
   ASAAS_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
   ASAAS_WEBHOOK_TOKEN: optionalSecret(32),
+  OPENAI_API_KEY: optionalSecret(),
+  OPENAI_MODEL: z.string().trim().min(1).default("gpt-5.6-luna"),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),

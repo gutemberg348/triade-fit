@@ -2,6 +2,7 @@ import { createElement, useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ImageBackground, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import {
   Award,
+  Bot,
   ChevronRight,
   CircleCheckBig,
   Clock3,
@@ -184,6 +185,19 @@ export function ProgramsScreen({ navigation }) {
         <Text style={styles.pageTitle}>Programas de treino</Text>
         <Text style={styles.lead}>Treinos organizados para você avançar com clareza e constância.</Text>
       </View>
+
+      <Pressable
+        onPress={() => navigation.navigate("TrainingAssistant")}
+        style={({ pressed }) => [styles.aiCoachShortcut, pressed && styles.pressed]}
+      >
+        <View style={styles.aiCoachShortcutIcon}><Bot size={24} color={colors.text} /></View>
+        <View style={styles.aiCoachShortcutCopy}>
+          <Text style={styles.aiCoachShortcutEyebrow}>LUNA · AJUDA COM TREINO</Text>
+          <Text style={styles.aiCoachShortcutTitle}>Dúvida ou dificuldade?</Text>
+          <Text style={styles.aiCoachShortcutText}>Envie uma pergunta, foto ou vídeo curto da execução.</Text>
+        </View>
+        <ChevronRight size={20} color={colors.primaryLight} />
+      </Pressable>
 
       {state.loading ? (
         <Loading />
@@ -587,6 +601,12 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.primaryLight, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
   pageTitle: { marginTop: 7, color: colors.text, fontFamily: fonts.displayBold, fontSize: 36, lineHeight: 43, letterSpacing: 0.1 },
   lead: { marginTop: 7, maxWidth: 320, color: colors.muted, fontSize: 14, lineHeight: 21 },
+  aiCoachShortcut: { minHeight: 96, marginBottom: 17, padding: 15, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "rgba(232,136,91,.42)", borderRadius: radii.card, backgroundColor: colors.surface },
+  aiCoachShortcutIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: colors.primary },
+  aiCoachShortcutCopy: { flex: 1, minWidth: 0 },
+  aiCoachShortcutEyebrow: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 8, letterSpacing: 1.05 },
+  aiCoachShortcutTitle: { marginTop: 3, color: colors.text, fontFamily: fonts.display, fontSize: 18, lineHeight: 23 },
+  aiCoachShortcutText: { marginTop: 2, color: colors.muted, fontSize: 9, lineHeight: 13 },
   programCard: { height: 304, marginBottom: 17, overflow: "hidden", borderRadius: radii.hero, backgroundColor: colors.surface, ...shadow },
   pressed: { opacity: 0.9, transform: [{ scale: 0.992 }] },
   programCover: { flex: 1 },

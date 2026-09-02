@@ -101,6 +101,7 @@ model User {
   createdAnnouncements  Announcement[]       @relation("AnnouncementAuthor")
   createdCommunityPosts CommunityPost[]      @relation("CommunityPostAuthor")
   communityPostLikes    CommunityPostLike[]
+  communityPostComments CommunityPostComment[]
   refreshTokens         RefreshToken[]
   passwordResetTokens   PasswordResetToken[]
   notifications         Notification[]
@@ -129,8 +130,44 @@ model StudentProfile {
   partnerProfile         PartnerProfile?
   receivedReferral       Referral?               @relation("ReferralStudent")
   paymentOrders          PaymentOrder[]
+  calorieEntries         CalorieEntry[]
+  trainingAiMessages     TrainingAiMessage[]
 
   @@index([createdAt])
+}
+
+model CalorieEntry {
+  id                 String         @id @default(uuid()) @db.Uuid
+  studentId          String         @db.Uuid
+  photoUrl           String
+  imageHash          String?
+  foodName            String
+  portionDescription String?
+  calories            Int
+  proteinGrams        Decimal?       @db.Decimal(7, 1)
+  carbohydrateGrams   Decimal?       @db.Decimal(7, 1)
+  fatGrams            Decimal?       @db.Decimal(7, 1)
+  confidence           String?
+  analysis             String?
+  consumedAt           DateTime       @default(now())
+  createdAt            DateTime       @default(now())
+  student              StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, consumedAt(sort: Desc)])
+  @@index([studentId, imageHash])
+}
+
+model TrainingAiMessage {
+  id        String         @id @default(uuid()) @db.Uuid
+  studentId String         @db.Uuid
+  role      String
+  message   String
+  imageUrl  String?
+  videoUrl  String?
+  createdAt DateTime       @default(now())
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt(sort: Desc)])
 }
 
 model PaymentOrder {
@@ -311,6 +348,7 @@ model CommunityPost {
   updatedAt       DateTime            @updatedAt
   createdBy       User                @relation("CommunityPostAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   likes           CommunityPostLike[]
+  comments        CommunityPostComment[]
 
   @@index([status, publishedAt(sort: Desc)])
   @@index([createdById])
@@ -325,6 +363,24 @@ model CommunityPostLike {
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
+  @@index([userId, createdAt])
+}
+
+model CommunityPostComment {
+  id        String                 @id @default(uuid()) @db.Uuid
+  postId    String                 @db.Uuid
+  userId    String                 @db.Uuid
+  parentId  String?                @db.Uuid
+  message   String
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  post      CommunityPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    CommunityPostComment?  @relation("CommunityCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   CommunityPostComment[] @relation("CommunityCommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([parentId, createdAt])
   @@index([userId, createdAt])
 }
 

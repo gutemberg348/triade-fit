@@ -1,10 +1,11 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarDays,
   Camera,
+  Check,
   ChevronRight,
   CirclePlus,
   ClipboardList,
@@ -62,6 +63,18 @@ const quickMeasurementFields = [
   ["bodyFatPercent", "Gordura", "%"],
 ];
 
+const initialMeasurementFields = [
+  ["weightKg", "Peso *", "kg"],
+  ["heightCm", "Altura *", "cm"],
+  ["bodyFatPercent", "Gordura (opcional)", "%"],
+];
+
+const photoPoses = [
+  { key: "FRONT", label: "Frente", hint: "Corpo de frente" },
+  { key: "SIDE", label: "Lado", hint: "Perfil lateral" },
+  { key: "BACK", label: "Costas", hint: "Corpo de costas" },
+];
+
 const additionalMeasurementGroups = [
   {
     title: "Outras medidas",
@@ -71,10 +84,104 @@ const additionalMeasurementGroups = [
   measurementGroups[2],
 ];
 
+const dateAtNoon = (value) => {
+  const raw = String(value || "");
+  return /^\d{4}-\d{2}-\d{2}/.test(raw) ? new Date(`${raw.slice(0, 10)}T12:00:00`) : new Date(value);
+};
+const localDateKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 const formatDate = (value, style = { day: "2-digit", month: "short" }) =>
-  new Intl.DateTimeFormat("pt-BR", style).format(new Date(value));
+  new Intl.DateTimeFormat("pt-BR", style).format(dateAtNoon(value));
 const formatNumber = (value) =>
   new Intl.NumberFormat("pt-BR").format(Number(value || 0));
+
+const groupPhotoSets = (photos = []) => {
+  const groups = new Map();
+  photos.forEach((photo) => {
+    const key = String(photo.takenAt).slice(0, 10);
+    if (!groups.has(key)) groups.set(key, { key, photos: {} });
+    if (!groups.get(key).photos[photo.pose]) groups.get(key).photos[photo.pose] = photo;
+  });
+  return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
+};
+
+const photoSetLabel = (key, long = false) =>
+  new Intl.DateTimeFormat("pt-BR", long
+    ? { day: "2-digit", month: "long", year: "numeric" }
+    : { day: "2-digit", month: "short" })
+    .format(new Date(`${key}T12:00:00`));
+
+function PhotoSlot({ photo, label, emptyLabel }) {
+  return (
+    <View style={styles.comparisonSlot}>
+      {photo ? (
+        <Image source={{ uri: photo.photoUrl }} style={styles.comparisonImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.comparisonMissing}>
+          <Camera size={21} color={colors.subtle} />
+          <Text style={styles.comparisonMissingText}>{emptyLabel}</Text>
+        </View>
+      )}
+      <View style={styles.comparisonSlotLabel}><Text style={styles.comparisonSlotLabelText}>{label}</Text></View>
+    </View>
+  );
+}
+
+function PhotoComparison({ photos, onAdd }) {
+  const sets = useMemo(() => groupPhotoSets(photos), [photos]);
+  const latest = sets[0];
+  const defaultPrevious = sets.find((item) => item.key.slice(0, 7) !== latest?.key.slice(0, 7)) || sets[1];
+  const [selectedKey, setSelectedKey] = useState(null);
+  const previous = sets.find((item) => item.key === selectedKey) || defaultPrevious;
+
+  if (!latest) {
+    return (
+      <Pressable style={styles.photoEmpty} onPress={onAdd}>
+        <View style={styles.photoEmptyIcon}><Camera color={colors.primaryLight} size={22} /></View>
+        <View style={{ flex: 1 }}><Text style={styles.photoEmptyTitle}>Crie seu primeiro registro visual</Text><Text style={styles.photoEmptyText}>Adicione frente, lado e costas em poucos passos.</Text></View>
+        <ChevronRight size={20} color={colors.subtle} />
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.comparisonCard}>
+      <View style={styles.comparisonTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.comparisonEyebrow}>ANTES E AGORA</Text>
+          <Text style={styles.comparisonTitle}>{previous ? "Compare sua evolução" : "Seu registro mais recente"}</Text>
+          <Text style={styles.comparisonSubtitle}>{previous ? `${photoSetLabel(previous.key, true)} × ${photoSetLabel(latest.key, true)}` : "Adicione um novo registro no próximo mês para comparar."}</Text>
+        </View>
+        <Pressable style={styles.comparisonAdd} onPress={onAdd}><ImagePlus size={17} color={colors.ink} /></Pressable>
+      </View>
+
+      {sets.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.comparisonPeriods}>
+          {sets.slice(1).map((set) => {
+            const active = set.key === previous?.key;
+            return <Pressable key={set.key} onPress={() => setSelectedKey(set.key)} style={[styles.comparisonPeriod, active && styles.comparisonPeriodActive]}><Text style={[styles.comparisonPeriodText, active && styles.comparisonPeriodTextActive]}>{photoSetLabel(set.key)}</Text></Pressable>;
+          })}
+        </ScrollView>
+      )}
+
+      <View style={styles.comparisonColumnsHead}>
+        <Text style={styles.comparisonColumnLabel}>{previous ? photoSetLabel(previous.key) : "Anterior"}</Text>
+        <Text style={[styles.comparisonColumnLabel, styles.comparisonColumnNow]}>Agora · {photoSetLabel(latest.key)}</Text>
+      </View>
+      {photoPoses.map((pose) => (
+        <View style={styles.comparisonPose} key={pose.key}>
+          <Text style={styles.comparisonPoseLabel}>{pose.label.toUpperCase()}</Text>
+          <View style={styles.comparisonPair}>
+            <PhotoSlot photo={previous?.photos[pose.key]} label="Antes" emptyLabel="Sem foto" />
+            <PhotoSlot photo={latest.photos[pose.key]} label="Agora" emptyLabel="Adicionar" />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function TrendChart({ data, field, unit }) {
   const pointsData = data
@@ -232,9 +339,9 @@ export function EvolutionScreen({ navigation }) {
           <View style={styles.initialMeasurementIcon}><ClipboardList size={29} color={colors.text} /></View>
           <Text style={styles.initialMeasurementEyebrow}>PRIMEIRO PASSO</Text>
           <Text style={styles.initialMeasurementTitle}>Cadastre suas medidas iniciais</Text>
-          <Text style={styles.initialMeasurementText}>Esse primeiro registro será a base das comparações, gráficos e resultados futuros. Você pode preencher apenas as medidas que deseja acompanhar.</Text>
+          <Text style={styles.initialMeasurementText}>Informe peso e altura para criar sua base. O percentual de gordura é opcional e pode ser adicionado agora ou depois.</Text>
           <View style={styles.initialMeasurementBenefits}>
-            {["Cria seu ponto de partida", "Libera gráficos de comparação", "Mantém todo o histórico organizado"].map((label) => (
+            {["Peso e altura formam sua base", "Gordura corporal é opcional", "Fotos podem ser comparadas por período"].map((label) => (
               <View style={styles.initialMeasurementBenefit} key={label}><View style={styles.initialMeasurementDot} /><Text style={styles.initialMeasurementBenefitText}>{label}</Text></View>
             ))}
           </View>
@@ -423,25 +530,9 @@ export function EvolutionScreen({ navigation }) {
       ) : <Empty title="Registre sua primeira medida" text="Acompanhe sua evolução com dados que fazem sentido para você." />}
 
       <View style={styles.sectionHead}>
-        <View><Text style={styles.sectionTitle}>Fotos de evolução</Text><Text style={styles.sectionSubtitle}>Registros privados da sua jornada</Text></View>
-        <Pressable style={styles.addPhoto} onPress={() => navigation.navigate("AddPhoto")}><ImagePlus size={17} color={colors.primaryLight} /></Pressable>
+        <View><Text style={styles.sectionEyebrow}>COMPARAÇÃO VISUAL</Text><Text style={styles.sectionTitle}>Fotos de evolução</Text><Text style={styles.sectionSubtitle}>Frente, lado e costas organizados por data</Text></View>
       </View>
-      {state.photos.length ? (
-        <View style={styles.photos}>
-          {state.photos.slice(0, 3).map((photo) => (
-            <View style={styles.photoWrap} key={photo.id}>
-              <Image source={{ uri: photo.photoUrl }} style={styles.photo} />
-              <View style={styles.photoLabel}><Text style={styles.photoLabelText}>{photo.pose === "FRONT" ? "Frente" : photo.pose === "SIDE" ? "Lado" : "Costas"}</Text></View>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <Pressable style={styles.photoEmpty} onPress={() => navigation.navigate("AddPhoto")}>
-          <View style={styles.photoEmptyIcon}><Camera color={colors.primaryLight} size={22} /></View>
-          <View><Text style={styles.photoEmptyTitle}>Adicione sua primeira foto</Text><Text style={styles.photoEmptyText}>Um registro visual, privado e seguro.</Text></View>
-          <ChevronRight size={20} color={colors.subtle} />
-        </Pressable>
-      )}
+      <PhotoComparison photos={state.photos} onAdd={() => navigation.navigate("AddPhoto")} />
     </Screen>
   );
 }
@@ -449,7 +540,7 @@ export function EvolutionScreen({ navigation }) {
 export function AddMeasurementScreen({ navigation, route }) {
   const isInitial = Boolean(route.params?.initial);
   const [form, setForm] = useState({
-    measuredAt: new Date().toISOString().slice(0, 10),
+    measuredAt: localDateKey(),
     notes: "",
     ...Object.fromEntries(measurementFieldKeys.map((key) => [key, ""])),
   });
@@ -461,8 +552,16 @@ export function AddMeasurementScreen({ navigation, route }) {
     () => measurementFieldKeys.filter((key) => form[key] !== "").length,
     [form],
   );
+  const essentialFields = isInitial ? initialMeasurementFields : quickMeasurementFields;
+  const detailGroups = isInitial
+    ? additionalMeasurementGroups.map((group) => ({ ...group, fields: group.fields.filter(([key]) => key !== "heightCm") }))
+    : additionalMeasurementGroups;
   const update = (key, value) => setForm((old) => ({ ...old, [key]: value }));
   const submit = async () => {
+    if (isInitial && (!form.weightKg || !form.heightCm)) {
+      setError("Informe seu peso e sua altura para criar o ponto de partida. A gordura corporal é opcional.");
+      return;
+    }
     if (!completeFields) {
       setError("Informe pelo menos uma medida antes de salvar.");
       return;
@@ -493,8 +592,8 @@ export function AddMeasurementScreen({ navigation, route }) {
       <View style={styles.formHero}>
         <View style={styles.formHeroIcon}><CalendarDays size={20} color={colors.accent} /></View>
         <View style={{ flex: 1 }}>
-          <View style={styles.formHeroTitleRow}><Text style={styles.formHeroTitle}>{isInitial ? "Seu ponto de partida" : "Seu registro de hoje"}</Text>{isInitial && <Text style={styles.optionalPill}>OPCIONAL</Text>}</View>
-          <Text style={styles.formHeroText}>{isInitial ? "Preencha quando se sentir confortável. Você pode fechar sem salvar e voltar depois." : "Preencha somente o que desejar. Seu histórico anterior permanece preservado."}</Text>
+          <View style={styles.formHeroTitleRow}><Text style={styles.formHeroTitle}>{isInitial ? "Seu ponto de partida" : "Seu registro de hoje"}</Text>{isInitial && <Text style={styles.requiredPill}>2 DADOS</Text>}</View>
+          <Text style={styles.formHeroText}>{isInitial ? "Peso e altura são necessários para iniciar. A gordura corporal é opcional; você pode fechar e voltar depois." : "Preencha somente o que desejar. Seu histórico anterior permanece preservado."}</Text>
         </View>
       </View>
       <Pressable style={styles.dateShortcut} onPress={() => setShowDate((value) => !value)}>
@@ -507,12 +606,12 @@ export function AddMeasurementScreen({ navigation, route }) {
           <TextInput style={styles.dateInput} value={form.measuredAt} onChangeText={(value) => update("measuredAt", value)} placeholder="AAAA-MM-DD" placeholderTextColor={colors.subtle} />
         </View>
       )}
-      <View style={styles.formProgress}><Text style={styles.formProgressText}>{Math.max(0, completeFields)} medida{completeFields === 1 ? "" : "s"} preenchida{completeFields === 1 ? "" : "s"}</Text><Text style={styles.formProgressOptional}>preencha só o necessário</Text></View>
+      <View style={styles.formProgress}><Text style={styles.formProgressText}>{isInitial ? `${[form.weightKg, form.heightCm].filter(Boolean).length} de 2 essenciais` : `${Math.max(0, completeFields)} medida${completeFields === 1 ? "" : "s"} preenchida${completeFields === 1 ? "" : "s"}`}</Text><Text style={styles.formProgressOptional}>{isInitial ? "gordura é opcional" : "preencha só o necessário"}</Text></View>
 
       <View style={styles.measureGroup}>
-        <Text style={styles.measureGroupTitle}>Medidas essenciais</Text>
-        <Text style={styles.measureGroupDescription}>Se decidir salvar, registre uma ou mais medidas para criar seu ponto de comparação.</Text>
-        <View style={styles.fieldsGrid}>{quickMeasurementFields.map(([key, label, unit]) => <InputField key={key} label={label} unit={unit} value={form[key]} onChangeText={(value) => update(key, value)} />)}</View>
+        <Text style={styles.measureGroupTitle}>{isInitial ? "Base da sua evolução" : "Medidas essenciais"}</Text>
+        <Text style={styles.measureGroupDescription}>{isInitial ? "Informe peso e altura. Se souber, acrescente o percentual de gordura." : "Registre uma ou mais medidas para criar seu ponto de comparação."}</Text>
+        <View style={styles.fieldsGrid}>{essentialFields.map(([key, label, unit]) => <InputField key={key} label={label} unit={unit} value={form[key]} onChangeText={(value) => update(key, value)} />)}</View>
       </View>
 
       <Pressable style={styles.addDetails} onPress={() => setShowDetails((value) => !value)}>
@@ -520,7 +619,7 @@ export function AddMeasurementScreen({ navigation, route }) {
         <View style={{ flex: 1 }}><Text style={styles.addDetailsTitle}>{showDetails ? "Ocultar medidas extras" : "Adicionar mais medidas"}</Text><Text style={styles.addDetailsText}>Braços, coxas, panturrilhas e outras circunferências.</Text></View>
         <ChevronRight size={19} color={colors.primaryLight} style={showDetails && { transform: [{ rotate: "90deg" }] }} />
       </Pressable>
-      {showDetails && additionalMeasurementGroups.map((group) => (
+      {showDetails && detailGroups.map((group) => (
         <View style={styles.measureGroup} key={group.title}>
           <Text style={styles.measureGroupTitle}>{group.title}</Text>
           <Text style={styles.measureGroupDescription}>{group.description}</Text>
@@ -539,24 +638,39 @@ export function AddMeasurementScreen({ navigation, route }) {
 }
 
 export function AddPhotoScreen({ navigation }) {
-  const [asset, setAsset] = useState(null);
-  const [pose, setPose] = useState("FRONT");
+  const [assets, setAssets] = useState({ FRONT: null, SIDE: null, BACK: null });
+  const [activePose, setActivePose] = useState("FRONT");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const choose = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 0.75 });
-    if (!result.canceled) setAsset(result.assets[0]);
+  const selectedCount = Object.values(assets).filter(Boolean).length;
+  const choose = async (source) => {
+    setError("");
+    if (source === "camera") {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) return setError("Permita o acesso à câmera para tirar sua foto.");
+    }
+    const launcher = source === "camera" ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    const result = await launcher({ mediaTypes: ["images"], allowsEditing: false, quality: 0.8 });
+    if (!result.canceled) setAssets((old) => ({ ...old, [activePose]: result.assets[0] }));
+  };
+  const upload = async (asset, pose) => {
+    const formData = new FormData();
+    const name = asset.fileName || `evolucao-${pose.toLowerCase()}-${Date.now()}.jpg`;
+    if (Platform.OS === "web" && asset.file) formData.append("image", asset.file, name);
+    else formData.append("image", { uri: asset.uri, name, type: asset.mimeType || "image/jpeg" });
+    const uploaded = await api.post("/uploads", formData, { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 });
+    return uploaded.data.url;
   };
   const submit = async () => {
-    if (!asset) return setError("Selecione uma foto.");
+    const selected = Object.entries(assets).filter(([, asset]) => asset);
+    if (!selected.length) return setError("Adicione pelo menos uma foto: frente, lado ou costas.");
     setSaving(true);
     setError("");
     try {
-      const formData = new FormData();
-      formData.append("image", { uri: asset.uri, name: asset.fileName || `evolucao-${Date.now()}.jpg`, type: asset.mimeType || "image/jpeg" });
-      const uploaded = await api.post("/uploads", formData, { headers: { "Content-Type": "multipart/form-data" } });
-      await api.post("/progress-photos", { photoUrl: uploaded.data.url, pose, takenAt: new Date().toISOString().slice(0, 10), notes });
+      const uploaded = await Promise.all(selected.map(async ([pose, asset]) => ({ pose, photoUrl: await upload(asset, pose) })));
+      const takenAt = localDateKey();
+      await Promise.all(uploaded.map((item) => api.post("/progress-photos", { ...item, takenAt, notes: notes || null })));
       navigation.goBack();
     } catch (err) {
       setError(messageFrom(err));
@@ -565,16 +679,40 @@ export function AddPhotoScreen({ navigation }) {
     }
   };
   return (
-    <Screen header="Foto de evolução" onBack={navigation.goBack}>
-      <Text style={styles.photoFormLead}>Use a mesma luz e posição sempre que puder. Assim sua comparação fica mais fiel.</Text>
-      <Pressable style={styles.picker} onPress={choose}>
-        {asset ? <Image source={{ uri: asset.uri }} style={styles.preview} /> : <><View style={styles.pickerIcon}><Camera color={colors.primaryLight} size={27} /></View><Text style={styles.pickerTitle}>Escolher uma foto</Text><Text style={styles.pickerText}>JPG, PNG ou WebP · até 8 MB</Text></>}
-      </Pressable>
-      <Text style={styles.measureGroupTitle}>Posição</Text>
-      <View style={styles.poseRow}>{[["FRONT", "Frente"], ["SIDE", "Lado"], ["BACK", "Costas"]].map(([key, label]) => <Pressable key={key} onPress={() => setPose(key)} style={[styles.pose, pose === key && styles.poseActive]}><Text style={[styles.poseText, pose === key && styles.poseTextActive]}>{label}</Text></Pressable>)}</View>
+    <Screen header="Novo registro visual" onBack={navigation.goBack}>
+      <View style={styles.photoFormHero}>
+        <View style={styles.photoFormHeroIcon}><Camera color={colors.accent} size={22} /></View>
+        <View style={{ flex: 1 }}><Text style={styles.photoFormHeroTitle}>Seu progresso em 3 ângulos</Text><Text style={styles.photoFormLead}>Use a mesma luz, distância e posição. Você pode adicionar uma, duas ou as três fotos.</Text></View>
+        <View style={styles.photoCount}><Text style={styles.photoCountValue}>{selectedCount}/3</Text><Text style={styles.photoCountLabel}>PRONTAS</Text></View>
+      </View>
+
+      <View style={styles.poseCards}>
+        {photoPoses.map((pose) => {
+          const asset = assets[pose.key];
+          const active = activePose === pose.key;
+          return (
+            <Pressable key={pose.key} onPress={() => setActivePose(pose.key)} style={[styles.poseCard, active && styles.poseCardActive]}>
+              <View style={styles.poseThumb}>{asset ? <Image source={{ uri: asset.uri }} style={styles.poseThumbImage} /> : <Camera size={18} color={active ? colors.primaryLight : colors.subtle} />}</View>
+              <Text style={[styles.poseCardTitle, active && styles.poseCardTitleActive]}>{pose.label}</Text>
+              <Text style={styles.poseCardHint}>{asset ? "Adicionada" : pose.hint}</Text>
+              {asset && <View style={styles.poseCheck}><Check size={11} color={colors.ink} strokeWidth={3} /></View>}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.photoPickerCard}>
+        <Text style={styles.photoPickerEyebrow}>FOTO DE {photoPoses.find((pose) => pose.key === activePose)?.label.toUpperCase()}</Text>
+        <Text style={styles.photoPickerTitle}>{assets[activePose] ? "Foto pronta para salvar" : "Como deseja adicionar?"}</Text>
+        {assets[activePose] && <Image source={{ uri: assets[activePose].uri }} style={styles.activePhotoPreview} resizeMode="cover" />}
+        <View style={styles.photoSourceRow}>
+          <Pressable style={styles.photoSourcePrimary} onPress={() => choose("camera")}><Camera size={18} color={colors.ink} /><Text style={styles.photoSourcePrimaryText}>Tirar foto</Text></Pressable>
+          <Pressable style={styles.photoSourceSecondary} onPress={() => choose("gallery")}><ImagePlus size={18} color={colors.primaryLight} /><Text style={styles.photoSourceSecondaryText}>Galeria</Text></Pressable>
+        </View>
+      </View>
       <View style={styles.notesCard}><Text style={styles.measureGroupTitle}>Observação</Text><TextInput style={styles.notesInput} multiline textAlignVertical="top" value={notes} onChangeText={setNotes} placeholder="Ex.: início do acompanhamento, 30 dias..." placeholderTextColor={colors.subtle} /></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button title={saving ? "Enviando..." : "Salvar foto"} icon={Camera} onPress={submit} disabled={saving} />
+      <Button title={saving ? "Enviando fotos..." : `Salvar registro${selectedCount ? ` (${selectedCount})` : ""}`} icon={Camera} onPress={submit} disabled={saving} />
     </Screen>
   );
 }
@@ -689,11 +827,35 @@ const styles = StyleSheet.create({
   photoEmptyIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.surface3 },
   photoEmptyTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
   photoEmptyText: { marginTop: 3, color: colors.muted, fontSize: 10 },
+  comparisonCard: { padding: 15, borderWidth: 1, borderColor: "rgba(245,179,141,.34)", borderRadius: radii.card, backgroundColor: colors.surface },
+  comparisonTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  comparisonEyebrow: { color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1.15 },
+  comparisonTitle: { marginTop: 5, color: colors.text, fontFamily: fonts.display, fontSize: 20, lineHeight: 24 },
+  comparisonSubtitle: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15, textTransform: "capitalize" },
+  comparisonAdd: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primaryLight },
+  comparisonPeriods: { paddingTop: 15, paddingBottom: 3, gap: 7 },
+  comparisonPeriod: { minHeight: 35, paddingHorizontal: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.surface2 },
+  comparisonPeriodActive: { borderColor: colors.primaryLight, backgroundColor: "rgba(245,179,141,.12)" },
+  comparisonPeriodText: { color: colors.muted, fontSize: 10, fontWeight: "800", textTransform: "capitalize" },
+  comparisonPeriodTextActive: { color: colors.primaryLight },
+  comparisonColumnsHead: { marginTop: 16, paddingBottom: 8, paddingLeft: 35, flexDirection: "row", gap: 8 },
+  comparisonColumnLabel: { flex: 1, color: colors.subtle, fontSize: 8, fontWeight: "900", letterSpacing: 0.7, textAlign: "center", textTransform: "uppercase" },
+  comparisonColumnNow: { color: colors.primaryLight },
+  comparisonPose: { marginBottom: 12 },
+  comparisonPoseLabel: { marginBottom: 6, color: colors.muted, fontSize: 8, fontWeight: "900", letterSpacing: 0.9 },
+  comparisonPair: { flexDirection: "row", gap: 8 },
+  comparisonSlot: { flex: 1, overflow: "hidden", borderWidth: 1, borderColor: colors.line, borderRadius: 15, backgroundColor: colors.surface2 },
+  comparisonImage: { width: "100%", aspectRatio: 0.86 },
+  comparisonMissing: { aspectRatio: 0.86, alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: colors.surface3 },
+  comparisonMissingText: { color: colors.subtle, fontSize: 9, fontWeight: "700" },
+  comparisonSlotLabel: { paddingVertical: 7, alignItems: "center", borderTopWidth: 1, borderTopColor: colors.line },
+  comparisonSlotLabelText: { color: colors.text, fontSize: 9, fontWeight: "900" },
   formHero: { marginBottom: 13, padding: 16, flexDirection: "row", gap: 12, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
   formHeroIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(245,179,141,.15)" },
   formHeroTitleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7 },
   formHeroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
   optionalPill: { paddingVertical: 3, paddingHorizontal: 6, overflow: "hidden", borderRadius: 7, color: colors.primaryLight, backgroundColor: "rgba(245,179,141,.12)", fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
+  requiredPill: { paddingVertical: 3, paddingHorizontal: 7, overflow: "hidden", borderRadius: 7, color: colors.ink, backgroundColor: colors.primaryLight, fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
   formHeroText: { marginTop: 4, color: colors.muted, fontSize: 11, lineHeight: 16 },
   closeMeasurement: { minHeight: 36, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.surface },
   closeMeasurementText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 10 },
@@ -723,7 +885,31 @@ const styles = StyleSheet.create({
   notesCard: { marginTop: 14, padding: 15, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   notesInput: { minHeight: 91, marginTop: 9, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 13, color: colors.text, fontSize: 12, lineHeight: 18, backgroundColor: colors.surface2 },
   error: { marginVertical: 12, color: colors.danger, fontSize: 12, fontWeight: "700" },
-  photoFormLead: { marginBottom: 18, color: colors.muted, fontSize: 13, lineHeight: 20 },
+  photoFormHero: { marginBottom: 14, padding: 15, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
+  photoFormHeroIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(232,136,91,.16)" },
+  photoFormHeroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
+  photoFormLead: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15 },
+  photoCount: { minWidth: 47, alignItems: "center" },
+  photoCountValue: { color: colors.primaryLight, fontFamily: fonts.displayBold, fontSize: 20, lineHeight: 24 },
+  photoCountLabel: { color: colors.subtle, fontSize: 6, fontWeight: "900", letterSpacing: 0.8 },
+  poseCards: { marginBottom: 14, flexDirection: "row", gap: 8 },
+  poseCard: { position: "relative", flex: 1, minHeight: 116, padding: 10, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 17, backgroundColor: colors.surface },
+  poseCardActive: { borderColor: colors.primaryLight, backgroundColor: "rgba(245,179,141,.09)" },
+  poseThumb: { width: 42, height: 42, overflow: "hidden", alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.surface3 },
+  poseThumbImage: { width: "100%", height: "100%" },
+  poseCardTitle: { marginTop: 7, color: colors.muted, fontFamily: fonts.display, fontSize: 13, lineHeight: 16 },
+  poseCardTitleActive: { color: colors.text },
+  poseCardHint: { marginTop: 2, minHeight: 18, color: colors.subtle, fontSize: 7, lineHeight: 9, textAlign: "center" },
+  poseCheck: { position: "absolute", top: 7, right: 7, width: 19, height: 19, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: colors.success },
+  photoPickerCard: { marginBottom: 14, padding: 15, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
+  photoPickerEyebrow: { color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  photoPickerTitle: { marginTop: 5, color: colors.text, fontFamily: fonts.display, fontSize: 18, lineHeight: 22 },
+  activePhotoPreview: { width: "100%", height: 210, marginTop: 12, borderRadius: 16, backgroundColor: colors.surface3 },
+  photoSourceRow: { marginTop: 13, flexDirection: "row", gap: 8 },
+  photoSourcePrimary: { flex: 1, minHeight: 47, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 14, backgroundColor: colors.primaryLight },
+  photoSourcePrimaryText: { color: colors.ink, fontFamily: fonts.semibold, fontSize: 11 },
+  photoSourceSecondary: { flex: 1, minHeight: 47, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
+  photoSourceSecondaryText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 11 },
   picker: { height: 294, marginBottom: 20, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   pickerIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.surface3 },
   pickerTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },

@@ -3,7 +3,7 @@ import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Dumbbell, Home, MessageCircle, TrendingUp, User } from "lucide-react-native";
+import { Dumbbell, Flame, Home, MessageCircle, TrendingUp, User } from "lucide-react-native";
 import { useAuth } from "../contexts/AuthContext.js";
 import { colors, fonts } from "../theme/index.js";
 import {
@@ -32,12 +32,14 @@ import {
   EditProfileScreen,
   ProfileScreen,
 } from "../screens/ProfileScreens.js";
+import { CaloriesScreen, TrainingAssistantScreen } from "../screens/AiScreens.js";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const tabIcons = {
   Início: Home,
   Treinos: Dumbbell,
+  Calorias: Flame,
   Evolução: TrendingUp,
   Comunidade: MessageCircle,
   Perfil: User,
@@ -53,6 +55,7 @@ function Tabs() {
     >
       <Tab.Screen name="Início" component={HomeScreen} />
       <Tab.Screen name="Treinos" component={ProgramsScreen} />
+      <Tab.Screen name="Calorias" component={CaloriesScreen} />
       <Tab.Screen name="Evolução" component={EvolutionScreen} />
       <Tab.Screen name="Comunidade" component={NoticeScreen} />
       <Tab.Screen name="Perfil" component={ProfileScreen} />
@@ -81,7 +84,7 @@ function BottomBar({ state, descriptors, navigation }) {
             onPress={onPress}
             style={({ pressed }) => [styles.tabItem, pressed && styles.tabItemPressed]}
           >
-            <Icon color={color} size={23} strokeWidth={focused ? 2.5 : 2} />
+            <Icon color={color} size={21} strokeWidth={focused ? 2.5 : 2} />
             <Text numberOfLines={1} style={[styles.tabLabel, { color }]}>{route.name}</Text>
             {focused && <View style={styles.tabIndicator} />}
           </Pressable>
@@ -127,6 +130,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Program" component={ProgramDetailScreen} />
             <Stack.Screen name="ContentModule" component={ContentModuleScreen} />
             <Stack.Screen name="Lesson" component={LessonScreen} />
+            <Stack.Screen name="TrainingAssistant" component={TrainingAssistantScreen} />
             <Stack.Screen
               name="MeditationSession"
               component={MeditationSessionScreen}
@@ -172,8 +176,8 @@ const styles = StyleSheet.create({
     left: 14,
     right: 14,
     bottom: 12,
-    height: 76,
-    paddingHorizontal: 7,
+    height: 74,
+    paddingHorizontal: 5,
     paddingVertical: 7,
     flexDirection: "row",
     alignItems: "stretch",
@@ -183,8 +187,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(28,19,17,.98)",
     elevation: 18,
   },
-  tabItem: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 18 },
+  tabItem: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 3, borderRadius: 16 },
   tabItemPressed: { backgroundColor: "rgba(255,255,255,.04)" },
-  tabLabel: { width: "100%", fontFamily: fonts.semibold, fontSize: 8, lineHeight: 12, textAlign: "center" },
+  tabLabel: { width: "100%", fontFamily: fonts.semibold, fontSize: 7, lineHeight: 11, textAlign: "center" },
   tabIndicator: { position: "absolute", top: 0, width: 17, height: 2, borderRadius: 2, backgroundColor: colors.primaryLight },
 });

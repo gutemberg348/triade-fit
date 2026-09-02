@@ -362,7 +362,7 @@ Para público específico, `AnnouncementRecipient` relaciona aviso e perfil de a
 
 #### `CommunityPost`
 
-É a publicação editorial exibida no feed da comunidade. Guarda autor e avatar apresentados, texto, imagem opcional, status e data de publicação. O conteúdo é criado pelo admin. Cada aluna ativa pode curtir ou desfazer a curtida; `CommunityPostLike` impede mais de uma curtida da mesma conta. Comentários não fazem parte do produto.
+É a publicação editorial exibida no feed da comunidade. Guarda autor e avatar apresentados, texto, imagem opcional, status e data de publicação. O conteúdo é criado pelo admin. Cada aluna ativa pode curtir ou desfazer a curtida; `CommunityPostLike` impede mais de uma curtida da mesma conta. `CommunityPostComment` guarda comentários e respostas, com autoria, data e `parentId` opcional para indicar qual comentário está sendo respondido.
 
 #### `RefreshToken` e `PasswordResetToken`
 
@@ -455,6 +455,20 @@ As rotas de autenticação, exceto logout e troca autenticada, compartilham limi
 
 `/uploads` aceita imagem JPG, PNG ou WebP de até 8 MB. `/uploads/video` aceita MP4, WebM ou MOV de até 150 MB. `/uploads/file`, restrito a admin, aceita PDF, TXT, Word, Excel, PowerPoint e ZIP de até 25 MB. Todos retornam a URL final; o upload de material também devolve nome original, MIME e tamanho.
 
+### Luna: nutrição e ajuda com treino
+
+| Método | Rota | Uso |
+| --- | --- | --- |
+| `GET` | `/nutrition/today` | total e refeições do dia local da aluna |
+| `POST` | `/ai/nutrition/analyze` | analisar foto do alimento e criar `CalorieEntry` |
+| `DELETE` | `/nutrition/entries/:id` | remover um alimento do contador |
+| `GET` | `/ai/training/history` | carregar o histórico recente da Luna |
+| `POST` | `/ai/training/advice` | enviar dúvida, foto ou vídeo curto de treino |
+
+As duas rotas de análise exigem acesso ativo e têm limite de 30 requisições por hora/IP. A chave `OPENAI_API_KEY` existe somente no backend; `OPENAI_MODEL` usa `gpt-5.6-luna` por padrão. Fotos são enviadas à Responses API como imagem. Como a Luna não recebe vídeo diretamente, o container instala `ffmpeg`, extrai até cinco quadros e envia apenas essas imagens. A interface deve sempre explicar que calorias são estimadas e que a ajuda de treino não diagnostica lesões nem substitui personal, fisioterapeuta, nutricionista ou médico.
+
+No chat de treino, a pergunta enviada aparece imediatamente e um balão com três pontos animados representa a resposta em processamento. Os atalhos e o prompt priorizam adaptações para limitações conhecidas e exercícios de baixo impacto, sem confundir automaticamente uma limitação prévia com dor aguda. Por exemplo, um polichinelo pode ser adaptado sem salto, com os pés apoiados e movimento de braços; sinais atuais de dor, trauma, inchaço ou perda de força continuam acionando a orientação de interromper e procurar avaliação profissional.
+
 ### Pagamento autenticado
 
 | Método | Rota | Uso |
@@ -503,12 +517,12 @@ Exemplo mínimo de medida:
 }
 ```
 
-Strings vazias nos campos numéricos são convertidas em `null`. Números precisam ser positivos e respeitar os limites do validator.
+Strings vazias nos campos numéricos são convertidas em `null`. Números precisam ser positivos e respeitar os limites do validator. Se a aluna ainda não possui nenhuma avaliação, a API exige `weightKg` e `heightCm`; a partir da segunda avaliação, basta ao menos uma medida numérica.
 
 Fluxo de foto em duas etapas:
 
 1. enviar multipart em `POST /uploads`;
-2. enviar a URL recebida, pose, data e observações em `POST /progress-photos`.
+2. enviar a URL recebida, pose, data e observações em `POST /progress-photos`. O mobile repete esse fluxo para cada ângulo selecionado no conjunto (frente, lado e/ou costas).
 
 ### Comunidade e avisos da aluna
 
@@ -518,6 +532,9 @@ Fluxo de foto em duas etapas:
 | `GET` | `/community/posts` | até 50 postagens publicadas do feed |
 | `POST` | `/community/posts/:id/like` | curtir uma postagem |
 | `DELETE` | `/community/posts/:id/like` | remover a própria curtida |
+| `GET` | `/community/posts/:id/likes` | listar as pessoas que curtiram |
+| `GET` | `/community/posts/:id/comments` | listar comentários e respostas |
+| `POST` | `/community/posts/:id/comments` | comentar ou responder usando `parentId` opcional |
 | `GET` | `/notifications` | até 50 notificações do usuário |
 | `PATCH` | `/notifications/:id/read` | marcar notificação própria como lida |
 
@@ -662,6 +679,7 @@ Com sessão:
 Tabs
 ├── Início
 ├── Treinos
+├── Calorias
 ├── Evolução
 ├── Comunidade
 └── Perfil
@@ -675,12 +693,13 @@ Responsabilidade das telas:
 - **Cadastro**: pede somente nome, e-mail, senha e confirmação; telefone e código de indicação são opcionais. Não pergunta objetivo/interesse nessa etapa. A validação acontece antes do envio e a resposta `422` da API é exibida no campo correspondente, sem limpar os demais valores digitados;
 - **Início**: carrega `/home-content` e avisos em paralelo; apresenta todas as aulas marcadas como introdutórias em carrossel, módulos com capa/progresso e comunicação recente. Se nenhuma estiver marcada, usa as três primeiras aulas publicadas como contingência;
 - **Treinos**: lista somente programas `TRAINING` e abre as aulas/exercícios diretamente, sem módulo visual;
+- **Calorias**: registra refeições por foto e quantidade consumida, envia a imagem para a Luna e soma no dia as estimativas de calorias, proteínas, carboidratos e gorduras. A API calcula SHA-256 do arquivo e não analisa nem adiciona novamente a mesma foto no mesmo dia. URLs antigas de upload são normalizadas para o host atual ao listar, evitando miniaturas quebradas entre navegador, Expo e produção. Os valores são aproximações visuais, mas a classificação interna de confiança não é exibida na lista; cada registro pode ser removido;
 - **Aula**: mostra capa/vídeo, duração, nível/categoria, instruções, anterior/próxima e ação de conclusão. Arquivos enviados e URLs de mídia direta usam `expo-video`; links de YouTube/Vimeo são convertidos para reprodução incorporada com `react-native-webview` no Android/iOS e `iframe` na web. O carregamento possui limite de 15 segundos e, em falha, oferece nova tentativa e abertura externa em vez de manter spinner infinito;
 - **Meditação**: uma aula marcada como “prática guiada” abre o cronômetro circular com iniciar, pausar e conclusão automática. Ela é acessada pelo botão da própria aula, não por uma aba inferior;
-- **Evolução**: destaca consistência, aulas, treinos, minutos, dias ativos, gráfico semanal, conquistas, medidas, comparação inicial/atual, histórico e fotos. No painel preenchido, “Nova medida” é uma ação compacta no cabeçalho e a evolução corporal aparece antes do resumo semanal; não existe mais um botão laranja de largura total repetido abaixo do gráfico. Sem nenhuma medição, mostra sempre o onboarding de medidas iniciais e o botão de cadastro; após o primeiro registro, abre o painel completo. Frontend e `measurementSchema` exigem pelo menos uma medida numérica para impedir um registro inicial vazio;
-- **Nova medição**: abre com Peso, Cintura, Quadril e Gordura; data, observação e medidas detalhadas ficam recolhidas para reduzir atrito, mas todos os campos corporais continuam disponíveis. A medição inicial é recomendada, não obrigatória: a aluna pode usar **Agora não** no convite ou **Fechar** no formulário sem criar um registro;
-- **Nova foto**: escolhe imagem, envia arquivo e registra pose/data;
-- **Comunidade**: alterna entre postagens do feed e avisos publicados pelo painel; imagens das postagens abrem em visualização ampliada e o coração permite curtir/descurtir sem exibir contagem;
+- **Evolução**: destaca consistência, aulas, treinos, minutos, dias ativos, gráfico semanal, conquistas, medidas, comparação inicial/atual, histórico e fotos. No painel preenchido, “Nova medida” é uma ação compacta no cabeçalho e a evolução corporal aparece antes do resumo semanal; não existe mais um botão laranja de largura total repetido abaixo do gráfico. Sem nenhuma medição, mostra sempre o onboarding de medidas iniciais e o botão de cadastro; o primeiro registro exige peso e altura, enquanto percentual de gordura e demais medidas são opcionais. A aluna ainda pode fechar o onboarding e voltar depois. Após o primeiro registro, abre o painel completo; registros seguintes continuam aceitando qualquer medida numérica isolada;
+- **Nova medição**: no primeiro acesso abre com Peso e Altura obrigatórios e Gordura opcional. Nos registros seguintes, prioriza Peso, Cintura, Quadril e Gordura; data, observação e medidas detalhadas ficam recolhidas para reduzir atrito, mas todos os campos corporais continuam disponíveis. A aluna pode usar **Agora não** no convite ou **Fechar** no formulário sem criar um registro, e o convite continuará aparecendo nas próximas visitas até existir a base inicial;
+- **Nova foto**: cria um registro visual com até três imagens no mesmo fluxo (frente, lado e costas), usando câmera ou galeria. A Evolução agrupa as fotos pela data, recomenda como comparação o registro de outro mês e permite selecionar qualquer conjunto anterior recente;
+- **Comunidade**: alterna entre postagens do feed e avisos publicados pelo painel; imagens abrem em visualização ampliada. Cada publicação mostra totais de curtidas e comentários. A aluna pode curtir/descurtir, abrir a lista com nomes e avatares de quem curtiu, comentar e responder comentários em uma conversa própria;
 - **Perfil**: exibe conta, edita dados e avatar, troca senha e encerra sessão.
 
 O aplicativo Android está configurado como `com.triadefit.app`, em orientação retrato e tema escuro. O ícone principal é `mobile/assets/icon-essenza.png`; a splash usa `mobile/assets/splash.png`.

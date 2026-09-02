@@ -195,7 +195,7 @@ function PostFields({ form, setForm, upload, uploading }) {
       <MediaField label="Imagem da postagem" field="imageUrl" value={form.imageUrl} setForm={setForm} form={form} upload={upload} uploading={uploading} />
       <MediaField label="Foto do perfil" field="authorAvatarUrl" value={form.authorAvatarUrl} setForm={setForm} form={form} upload={upload} uploading={uploading} />
       <p className="form-helper full">
-        As curtidas são registradas pelos alunos no aplicativo. Comentários não fazem parte deste feed.
+        No aplicativo, as alunas podem curtir, ver quem curtiu, comentar e responder umas às outras.
       </p>
     </>
   );

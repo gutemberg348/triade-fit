@@ -3,6 +3,7 @@ import { authenticate, authorize, requireActiveAccess } from "../middlewares/aut
 import { validate } from "../middlewares/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { idParams } from "../validators/common.validators.js";
+import { communityCommentSchema } from "../validators/community.validators.js";
 import * as controller from "../controllers/announcement.controller.js";
 
 const router = Router();
@@ -24,6 +25,25 @@ router.delete(
   ...studentOnly,
   validate(idParams, "params"),
   asyncHandler(controller.unlikeCommunityPost),
+);
+router.get(
+  "/community/posts/:id/likes",
+  ...studentOnly,
+  validate(idParams, "params"),
+  asyncHandler(controller.communityPostLikes),
+);
+router.get(
+  "/community/posts/:id/comments",
+  ...studentOnly,
+  validate(idParams, "params"),
+  asyncHandler(controller.communityPostComments),
+);
+router.post(
+  "/community/posts/:id/comments",
+  ...studentOnly,
+  validate(idParams, "params"),
+  validate(communityCommentSchema),
+  asyncHandler(controller.createCommunityPostComment),
 );
 router.get(
   "/notifications",
