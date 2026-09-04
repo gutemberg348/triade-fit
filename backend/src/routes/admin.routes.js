@@ -4,6 +4,7 @@ import { validate } from "../middlewares/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { idParams, paginationQuery } from "../validators/common.validators.js";
 import { measurementSchema } from "../validators/measurement.validators.js";
+import { communityCommentSchema } from "../validators/community.validators.js";
 import {
   announcementSchema,
   communityPostSchema,
@@ -134,6 +135,22 @@ router.put(
   asyncHandler(controller.updateAnnouncement),
 );
 router.get("/community-posts", asyncHandler(controller.listCommunityPosts));
+router.get(
+  "/community-posts/:id/comments",
+  validate(idParams, "params"),
+  asyncHandler(controller.listCommunityPostComments),
+);
+router.get(
+  "/community-posts/:id/likes",
+  validate(idParams, "params"),
+  asyncHandler(controller.listCommunityPostLikes),
+);
+router.post(
+  "/community-posts/:id/comments",
+  validate(idParams, "params"),
+  validate(communityCommentSchema),
+  asyncHandler(controller.createCommunityPostComment),
+);
 router.post(
   "/community-posts",
   validate(communityPostSchema),

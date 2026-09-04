@@ -29,6 +29,7 @@ export const measurementSchema = z.object({
 );
 export const photoSchema = z.object({
   photoUrl: optionalUrl.refine(Boolean, "Informe a URL da foto."),
+  moduleId: z.uuid().optional(),
   pose: z.enum(["FRONT", "SIDE", "BACK"]),
   takenAt: z.iso.date(),
   notes: z.string().trim().max(500).nullable().optional(),

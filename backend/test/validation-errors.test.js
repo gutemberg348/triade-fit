@@ -5,7 +5,10 @@ import request from "supertest";
 import { validate } from "../src/middlewares/validate.js";
 import { errorHandler } from "../src/middlewares/errorHandler.js";
 import { studentCreateSchema } from "../src/validators/admin.validators.js";
-import { measurementSchema } from "../src/validators/measurement.validators.js";
+import {
+  measurementSchema,
+  photoSchema,
+} from "../src/validators/measurement.validators.js";
 
 test("API devolve mensagens claras e separadas por campo", async () => {
   const app = express();
@@ -46,4 +49,18 @@ test("avaliação corporal exige pelo menos uma medida real", () => {
   });
   assert.equal(valid.success, true);
   assert.equal(valid.data.waistCm, 82.5);
+});
+
+test("foto de evolução aceita somente um módulo UUID válido", () => {
+  const base = {
+    photoUrl: "https://triade-fit.com/uploads/evolucao.jpg",
+    pose: "FRONT",
+    takenAt: "2026-09-03",
+  };
+  assert.equal(photoSchema.safeParse(base).success, true);
+  assert.equal(photoSchema.safeParse({
+    ...base,
+    moduleId: "98c0606c-9cc8-4f76-ab33-fd97c3c94428",
+  }).success, true);
+  assert.equal(photoSchema.safeParse({ ...base, moduleId: "modulo-1" }).success, false);
 });

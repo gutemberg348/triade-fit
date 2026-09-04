@@ -13,6 +13,7 @@ import {
   Dumbbell,
   ImagePlus,
   Clock3,
+  Layers3,
   Medal,
   Ruler,
   Scale,
@@ -58,8 +59,6 @@ const measurementFieldKeys = measurementGroups.flatMap((group) =>
 
 const quickMeasurementFields = [
   ["weightKg", "Peso", "kg"],
-  ["waistCm", "Cintura", "cm"],
-  ["hipsCm", "Quadril", "cm"],
   ["bodyFatPercent", "Gordura", "%"],
 ];
 
@@ -78,8 +77,8 @@ const photoPoses = [
 const additionalMeasurementGroups = [
   {
     title: "Outras medidas",
-    description: "Opcional: adicione apenas o que quiser acompanhar.",
-    fields: [["heightCm", "Altura", "cm"], ["abdomenCm", "Abdômen", "cm"], ["chestCm", "Peitoral", "cm"]],
+    description: "Opcional: adicione apenas os dados que quiser acompanhar.",
+    fields: [["heightCm", "Altura", "cm"], ...measurementGroups[1].fields],
   },
   measurementGroups[2],
 ];
@@ -96,89 +95,92 @@ const formatDate = (value, style = { day: "2-digit", month: "short" }) =>
   new Intl.DateTimeFormat("pt-BR", style).format(dateAtNoon(value));
 const formatNumber = (value) =>
   new Intl.NumberFormat("pt-BR").format(Number(value || 0));
+const measurementSummary = (item) => [
+  ["weightKg", "kg", "Peso"],
+  ["heightCm", "cm", "Altura"],
+  ["bodyFatPercent", "%", "Gordura"],
+  ["waistCm", "cm", "Cintura"],
+  ["abdomenCm", "cm", "Abdômen"],
+  ["hipsCm", "cm", "Quadril"],
+  ["chestCm", "cm", "Peitoral"],
+].flatMap(([key, unit, label]) => item[key] == null ? [] : [`${label}: ${item[key]} ${unit}`]).join(" · ");
 
-const groupPhotoSets = (photos = []) => {
-  const groups = new Map();
-  photos.forEach((photo) => {
-    const key = String(photo.takenAt).slice(0, 10);
-    if (!groups.has(key)) groups.set(key, { key, photos: {} });
-    if (!groups.get(key).photos[photo.pose]) groups.get(key).photos[photo.pose] = photo;
+const latestModulePhotos = (photos, moduleId) => {
+  const byPose = new Map();
+  photos
+    .filter((photo) => photo.moduleId === moduleId)
+    .forEach((photo) => {
+      if (!byPose.has(photo.pose)) byPose.set(photo.pose, photo);
+    });
+  return photoPoses.flatMap((pose) => {
+    const photo = byPose.get(pose.key);
+    return photo ? [{ ...photo, poseLabel: pose.label }] : [];
   });
-  return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
 };
 
-const photoSetLabel = (key, long = false) =>
-  new Intl.DateTimeFormat("pt-BR", long
-    ? { day: "2-digit", month: "long", year: "numeric" }
-    : { day: "2-digit", month: "short" })
-    .format(new Date(`${key}T12:00:00`));
-
-function PhotoSlot({ photo, label, emptyLabel }) {
+function ModulePhotoJourney({ modules = [], photos = [], onAdd }) {
+  const availableModules = modules.flatMap((module, index) => (
+    module.availability?.isLocked ? [] : [{ module, index }]
+  ));
+  if (!availableModules.length) return null;
   return (
-    <View style={styles.comparisonSlot}>
-      {photo ? (
-        <Image source={{ uri: photo.photoUrl }} style={styles.comparisonImage} resizeMode="cover" />
-      ) : (
-        <View style={styles.comparisonMissing}>
-          <Camera size={21} color={colors.subtle} />
-          <Text style={styles.comparisonMissingText}>{emptyLabel}</Text>
-        </View>
-      )}
-      <View style={styles.comparisonSlotLabel}><Text style={styles.comparisonSlotLabelText}>{label}</Text></View>
-    </View>
-  );
-}
-
-function PhotoComparison({ photos, onAdd }) {
-  const sets = useMemo(() => groupPhotoSets(photos), [photos]);
-  const latest = sets[0];
-  const defaultPrevious = sets.find((item) => item.key.slice(0, 7) !== latest?.key.slice(0, 7)) || sets[1];
-  const [selectedKey, setSelectedKey] = useState(null);
-  const previous = sets.find((item) => item.key === selectedKey) || defaultPrevious;
-
-  if (!latest) {
-    return (
-      <Pressable style={styles.photoEmpty} onPress={onAdd}>
-        <View style={styles.photoEmptyIcon}><Camera color={colors.primaryLight} size={22} /></View>
-        <View style={{ flex: 1 }}><Text style={styles.photoEmptyTitle}>Crie seu primeiro registro visual</Text><Text style={styles.photoEmptyText}>Adicione frente, lado e costas em poucos passos.</Text></View>
-        <ChevronRight size={20} color={colors.subtle} />
-      </Pressable>
-    );
-  }
-
-  return (
-    <View style={styles.comparisonCard}>
-      <View style={styles.comparisonTop}>
+    <View style={styles.modulePhotosSection}>
+      <View style={styles.modulePhotosHeading}>
+        <View style={styles.modulePhotosHeadingIcon}><Layers3 size={20} color={colors.primaryLight} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.comparisonEyebrow}>ANTES E AGORA</Text>
-          <Text style={styles.comparisonTitle}>{previous ? "Compare sua evolução" : "Seu registro mais recente"}</Text>
-          <Text style={styles.comparisonSubtitle}>{previous ? `${photoSetLabel(previous.key, true)} × ${photoSetLabel(latest.key, true)}` : "Adicione um novo registro no próximo mês para comparar."}</Text>
+          <Text style={styles.sectionEyebrow}>REGISTRO VISUAL</Text>
+          <Text style={styles.sectionTitle}>Sua evolução por módulo</Text>
+          <Text style={styles.sectionSubtitle}>Uma etapa visual para cada módulo liberado</Text>
         </View>
-        <Pressable style={styles.comparisonAdd} onPress={onAdd}><ImagePlus size={17} color={colors.ink} /></Pressable>
       </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.modulePhotosTrack, availableModules.length === 1 && styles.modulePhotosTrackSingle]}
+      >
+        {availableModules.map(({ module, index }) => {
+          const modulePhotos = latestModulePhotos(photos, module.id);
+          return (
+            <View style={[styles.modulePhotoCard, availableModules.length === 1 && styles.modulePhotoCardSingle]} key={module.id}>
+              <View style={styles.modulePhotoCardTop}>
+                <View style={styles.modulePhotoNumber}>
+                  <Text style={styles.modulePhotoNumberLabel}>MÓDULO</Text>
+                  <Text style={styles.modulePhotoNumberValue}>{String(index + 1).padStart(2, "0")}</Text>
+                </View>
+                <View style={styles.modulePhotoTitleWrap}>
+                  <Text style={styles.modulePhotoTitle} numberOfLines={2}>{module.title}</Text>
+                  <Text style={[styles.modulePhotoStatus, styles.modulePhotoStatusAvailable]}>
+                    {modulePhotos.length ? "REGISTRO ADICIONADO" : "DISPONÍVEL PARA FOTO"}
+                  </Text>
+                </View>
+              </View>
 
-      {sets.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.comparisonPeriods}>
-          {sets.slice(1).map((set) => {
-            const active = set.key === previous?.key;
-            return <Pressable key={set.key} onPress={() => setSelectedKey(set.key)} style={[styles.comparisonPeriod, active && styles.comparisonPeriodActive]}><Text style={[styles.comparisonPeriodText, active && styles.comparisonPeriodTextActive]}>{photoSetLabel(set.key)}</Text></Pressable>;
-          })}
-        </ScrollView>
-      )}
-
-      <View style={styles.comparisonColumnsHead}>
-        <Text style={styles.comparisonColumnLabel}>{previous ? photoSetLabel(previous.key) : "Anterior"}</Text>
-        <Text style={[styles.comparisonColumnLabel, styles.comparisonColumnNow]}>Agora · {photoSetLabel(latest.key)}</Text>
-      </View>
-      {photoPoses.map((pose) => (
-        <View style={styles.comparisonPose} key={pose.key}>
-          <Text style={styles.comparisonPoseLabel}>{pose.label.toUpperCase()}</Text>
-          <View style={styles.comparisonPair}>
-            <PhotoSlot photo={previous?.photos[pose.key]} label="Antes" emptyLabel="Sem foto" />
-            <PhotoSlot photo={latest.photos[pose.key]} label="Agora" emptyLabel="Adicionar" />
-          </View>
-        </View>
-      ))}
+              {modulePhotos.length ? (
+                <>
+                  <View style={styles.modulePhotoGallery}>
+                    {modulePhotos.map((photo) => (
+                      <View style={styles.modulePhotoImageWrap} key={photo.id}>
+                        <Image source={{ uri: photo.photoUrl }} style={styles.modulePhotoImage} resizeMode="cover" />
+                        <Text style={styles.modulePhotoPose}>{photo.poseLabel}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.modulePhotoRegistered}>
+                    <Text style={styles.modulePhotoDate}>Registrado em {formatDate(modulePhotos[0].takenAt, { day: "2-digit", month: "long", year: "numeric" })}</Text>
+                    <Pressable style={styles.modulePhotoSmallAction} onPress={() => onAdd(module, index)}><ImagePlus size={15} color={colors.primaryLight} /><Text style={styles.modulePhotoSmallActionText}>Atualizar</Text></Pressable>
+                  </View>
+                </>
+              ) : (
+                <Pressable style={styles.modulePhotoAvailable} onPress={() => onAdd(module, index)}>
+                  <View style={styles.modulePhotoAvailableIcon}><Camera size={24} color={colors.ink} /></View>
+                  <View style={{ flex: 1 }}><Text style={styles.modulePhotoAvailableTitle}>Registrar esta etapa</Text><Text style={styles.modulePhotoAvailableText}>Adicione somente as posições que desejar.</Text></View>
+                  <ChevronRight size={19} color={colors.primaryLight} />
+                </Pressable>
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -275,49 +277,13 @@ function InputField({ label, unit, value, onChangeText }) {
   );
 }
 
-function WeeklyActivity({ data = [] }) {
-  const max = Math.max(...data.map((item) => item.minutes), 1);
-  return (
-    <View style={styles.weeklyCard}>
-      <View style={styles.weeklyHeader}>
-        <View>
-          <Text style={styles.weeklyEyebrow}>ÚLTIMOS 7 DIAS</Text>
-          <Text style={styles.weeklyTitle}>Ritmo da semana</Text>
-        </View>
-        <TrendingUp size={20} color={colors.primaryLight} />
-      </View>
-      <View style={styles.weekBars}>
-        {data.map((item) => (
-          <View style={styles.weekDay} key={item.date}>
-            <View style={styles.barTrack}>
-              <View
-                style={[
-                  styles.barFill,
-                  { height: `${Math.max(8, (item.minutes / max) * 100)}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.weekValue}>{item.minutes || "—"}</Text>
-            <Text style={styles.weekLabel}>
-              {new Intl.DateTimeFormat("pt-BR", { weekday: "short" })
-                .format(new Date(`${item.date}T12:00:00`))
-                .replace(".", "")}
-            </Text>
-          </View>
-        ))}
-      </View>
-      <Text style={styles.weekCaption}>Minutos concluídos por dia</Text>
-    </View>
-  );
-}
-
 export function EvolutionScreen({ navigation }) {
-  const [state, setState] = useState({ loading: true, error: "", evolution: null, photos: [] });
+  const [state, setState] = useState({ loading: true, error: "", evolution: null, photos: [], modules: [] });
   const [selected, setSelected] = useState(options[0]);
   const load = useCallback(async () => {
     try {
-      const [evolution, photos] = await Promise.all([api.get("/measurements/evolution"), api.get("/progress-photos")]);
-      setState({ loading: false, error: "", evolution: evolution.data, photos: photos.data });
+      const [evolution, photos, home] = await Promise.all([api.get("/measurements/evolution"), api.get("/progress-photos"), api.get("/home-content")]);
+      setState({ loading: false, error: "", evolution: evolution.data, photos: photos.data, modules: home.data.modules || [] });
     } catch (error) {
       setState((old) => ({ ...old, loading: false, error: messageFrom(error) }));
     }
@@ -327,6 +293,12 @@ export function EvolutionScreen({ navigation }) {
   if (state.loading) return <Screen><Loading label="Atualizando seus indicadores..." /></Screen>;
   if (state.error && !state.evolution) return <Screen><ErrorBox message={state.error} retry={load} /></Screen>;
 
+  const openModulePhoto = (module, index) => navigation.navigate("AddPhoto", {
+    moduleId: module.id,
+    moduleTitle: module.title,
+    moduleNumber: index + 1,
+  });
+
   if (!state.evolution.measurements?.length) {
     return (
       <Screen>
@@ -335,13 +307,14 @@ export function EvolutionScreen({ navigation }) {
           <Text style={styles.title}>Meu progresso</Text>
           <Text style={styles.lead}>Para acompanhar sua evolução, precisamos primeiro registrar seu ponto de partida.</Text>
         </View>
+        <ModulePhotoJourney modules={state.modules} photos={state.photos} onAdd={openModulePhoto} />
         <View style={styles.initialMeasurementCard}>
           <View style={styles.initialMeasurementIcon}><ClipboardList size={29} color={colors.text} /></View>
           <Text style={styles.initialMeasurementEyebrow}>PRIMEIRO PASSO</Text>
           <Text style={styles.initialMeasurementTitle}>Cadastre suas medidas iniciais</Text>
           <Text style={styles.initialMeasurementText}>Informe peso e altura para criar sua base. O percentual de gordura é opcional e pode ser adicionado agora ou depois.</Text>
           <View style={styles.initialMeasurementBenefits}>
-            {["Peso e altura formam sua base", "Gordura corporal é opcional", "Fotos podem ser comparadas por período"].map((label) => (
+            {["Peso e altura formam sua base", "Gordura corporal é opcional", "Outras medidas ficam nas opções extras"].map((label) => (
               <View style={styles.initialMeasurementBenefit} key={label}><View style={styles.initialMeasurementDot} /><Text style={styles.initialMeasurementBenefitText}>{label}</Text></View>
             ))}
           </View>
@@ -356,7 +329,11 @@ export function EvolutionScreen({ navigation }) {
     );
   }
 
-  const comparison = state.evolution.comparison[selected.key];
+  const availableOptions = options.filter((option) =>
+    state.evolution.measurements.some((item) => item[option.key] != null),
+  );
+  const activeMetric = availableOptions.find((option) => option.key === selected.key) || availableOptions[0] || options[0];
+  const comparison = state.evolution.comparison[activeMetric.key];
   const activity = state.evolution.activity || {
     workouts: 0,
     minutes: 0,
@@ -370,11 +347,11 @@ export function EvolutionScreen({ navigation }) {
     minutes: 0,
     activeDays: 0,
   };
-  const decreaseIsPositive = ["weightKg", "waistCm", "bodyFatPercent"].includes(selected.key);
+  const decreaseIsPositive = ["weightKg", "waistCm", "bodyFatPercent"].includes(activeMetric.key);
   const change = comparison?.change ?? null;
   const positive = change == null || change === 0 || (decreaseIsPositive ? change < 0 : change > 0);
   const TrendIcon = change != null && change < 0 ? ArrowDownRight : ArrowUpRight;
-  const SelectedIcon = selected.Icon;
+  const SelectedIcon = activeMetric.Icon;
 
   return (
     <Screen>
@@ -391,6 +368,8 @@ export function EvolutionScreen({ navigation }) {
         </View>
         <Text style={styles.lead}>Transforme seus registros em decisões mais conscientes sobre sua jornada.</Text>
       </View>
+
+      <ModulePhotoJourney modules={state.modules} photos={state.photos} onAdd={openModulePhoto} />
 
       <View style={styles.lifetimeCard}>
         <View style={styles.lifetimeTop}>
@@ -431,9 +410,9 @@ export function EvolutionScreen({ navigation }) {
       </View>
 
       <View style={styles.selector}>
-        {options.map((option) => {
+        {availableOptions.map((option) => {
           const Icon = option.Icon;
-          const active = selected.key === option.key;
+          const active = activeMetric.key === option.key;
           return (
             <Pressable key={option.key} style={[styles.option, active && styles.optionActive]} onPress={() => setSelected(option)}>
               <Icon size={16} color={active ? colors.ink : colors.muted} />
@@ -446,51 +425,28 @@ export function EvolutionScreen({ navigation }) {
       <View style={styles.chartCard}>
         <View style={styles.chartHeading}>
           <View>
-            <View style={styles.metricLabel}><SelectedIcon size={14} color={colors.accent} /><Text style={styles.small}>{selected.label.toUpperCase()}</Text></View>
-            <Text style={styles.current}>{comparison?.current ?? "—"}<Text style={styles.currentUnit}> {selected.unit}</Text></Text>
+            <View style={styles.metricLabel}><SelectedIcon size={14} color={colors.accent} /><Text style={styles.small}>{activeMetric.label.toUpperCase()}</Text></View>
+            <Text style={styles.current}>{comparison?.current ?? "—"}<Text style={styles.currentUnit}> {activeMetric.unit}</Text></Text>
           </View>
           {comparison && (
             <View style={[styles.change, positive ? styles.changePositive : styles.changeNeutral]}>
               <TrendIcon size={16} color={positive ? colors.success : colors.warning} />
               <View>
-                <Text style={[styles.changeValue, { color: positive ? colors.success : colors.warning }]}>{change > 0 ? "+" : ""}{change} {selected.unit}</Text>
+                <Text style={[styles.changeValue, { color: positive ? colors.success : colors.warning }]}>{change > 0 ? "+" : ""}{change} {activeMetric.unit}</Text>
                 <Text style={styles.changeCaption}>desde o início</Text>
               </View>
             </View>
           )}
         </View>
-        <TrendChart data={state.evolution.measurements} field={selected.key} unit={selected.unit} />
+        <TrendChart data={state.evolution.measurements} field={activeMetric.key} unit={activeMetric.unit} />
         {comparison && (
           <View style={styles.compare}>
-            <View><Text style={styles.compareLabel}>PRIMEIRO REGISTRO</Text><Text style={styles.compareValue}>{comparison.initial} {selected.unit}</Text></View>
+            <View><Text style={styles.compareLabel}>PRIMEIRO REGISTRO</Text><Text style={styles.compareValue}>{comparison.initial} {activeMetric.unit}</Text></View>
             <View style={styles.compareDivider} />
-            <View><Text style={styles.compareLabel}>ÚLTIMO REGISTRO</Text><Text style={styles.compareValue}>{comparison.current} {selected.unit}</Text></View>
+            <View><Text style={styles.compareLabel}>ÚLTIMO REGISTRO</Text><Text style={styles.compareValue}>{comparison.current} {activeMetric.unit}</Text></View>
           </View>
         )}
       </View>
-
-      <View style={styles.sectionHead}>
-        <View>
-          <Text style={styles.sectionEyebrow}>ÚLTIMOS 7 DIAS</Text>
-          <Text style={styles.sectionTitle}>Seu ritmo nesta semana</Text>
-          <Text style={styles.sectionSubtitle}>Frequência e tempo dedicados às aulas</Text>
-        </View>
-      </View>
-      <View style={styles.statsRow}>
-        {[
-          [Dumbbell, "Treinos", activity.workouts],
-          [Clock3, "Minutos", activity.minutes],
-          [CalendarDays, "Dias ativos", activity.activeDays],
-        ].map(([Icon, label, value]) => (
-          <View style={styles.statCard} key={label}>
-            <View style={styles.statIcon}><Icon size={17} color={colors.primaryLight} /></View>
-            <Text style={styles.statValue}>{formatNumber(value)}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
-          </View>
-        ))}
-      </View>
-
-      <WeeklyActivity data={activity.daily} />
 
       <View style={styles.sectionHead}>
         <View><Text style={styles.sectionTitle}>Conquistas</Text><Text style={styles.sectionSubtitle}>Pequenas vitórias constroem sua constância</Text></View>
@@ -522,17 +478,13 @@ export function EvolutionScreen({ navigation }) {
             <View style={styles.historyIcon}><Scale color={index === 0 ? colors.accent : colors.primaryLight} size={19} /></View>
             <View style={styles.historyCopy}>
               <View style={styles.historyTop}><Text style={styles.historyDate}>{formatDate(item.measuredAt, { day: "2-digit", month: "long", year: "numeric" })}</Text>{index === 0 && <Text style={styles.latestPill}>RECENTE</Text>}</View>
-              <Text style={styles.historyValues}>{item.weightKg != null ? `${item.weightKg} kg` : "Peso não informado"} · {item.waistCm != null ? `${item.waistCm} cm cintura` : "Cintura não informada"}</Text>
+              <Text style={styles.historyValues}>{measurementSummary(item)}</Text>
             </View>
             <ChevronRight size={20} color={colors.subtle} />
           </View>
         ))
       ) : <Empty title="Registre sua primeira medida" text="Acompanhe sua evolução com dados que fazem sentido para você." />}
 
-      <View style={styles.sectionHead}>
-        <View><Text style={styles.sectionEyebrow}>COMPARAÇÃO VISUAL</Text><Text style={styles.sectionTitle}>Fotos de evolução</Text><Text style={styles.sectionSubtitle}>Frente, lado e costas organizados por data</Text></View>
-      </View>
-      <PhotoComparison photos={state.photos} onAdd={() => navigation.navigate("AddPhoto")} />
     </Screen>
   );
 }
@@ -548,8 +500,6 @@ export function AddMeasurementScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showDate, setShowDate] = useState(false);
-  const [photos, setPhotos] = useState({ FRONT: null, SIDE: null, BACK: null });
-  const [activePhotoPose, setActivePhotoPose] = useState("FRONT");
   const completeFields = useMemo(
     () => measurementFieldKeys.filter((key) => form[key] !== "").length,
     [form],
@@ -559,28 +509,6 @@ export function AddMeasurementScreen({ navigation, route }) {
     ? additionalMeasurementGroups.map((group) => ({ ...group, fields: group.fields.filter(([key]) => key !== "heightCm") }))
     : additionalMeasurementGroups;
   const update = (key, value) => setForm((old) => ({ ...old, [key]: value }));
-  const photoCount = Object.values(photos).filter(Boolean).length;
-  const chooseMeasurementPhoto = async (source) => {
-    setError("");
-    if (source === "camera") {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) return setError("Permita o acesso à câmera para tirar sua foto.");
-    }
-    const launcher = source === "camera" ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
-    const result = await launcher({ mediaTypes: ["images"], allowsEditing: false, quality: 0.8 });
-    if (!result.canceled) setPhotos((current) => ({ ...current, [activePhotoPose]: result.assets[0] }));
-  };
-  const uploadMeasurementPhoto = async (asset, pose) => {
-    const body = new FormData();
-    const name = asset.fileName || `evolucao-${pose.toLowerCase()}-${Date.now()}.jpg`;
-    if (Platform.OS === "web" && asset.file) body.append("image", asset.file, name);
-    else body.append("image", { uri: asset.uri, name, type: asset.mimeType || "image/jpeg" });
-    const { data } = await api.post("/uploads", body, {
-      headers: { "Content-Type": "multipart/form-data" },
-      timeout: 120000,
-    });
-    return data.url;
-  };
   const submit = async () => {
     if (isInitial && (!form.weightKg || !form.heightCm)) {
       setError("Informe seu peso e sua altura para criar o ponto de partida. A gordura corporal é opcional.");
@@ -593,17 +521,7 @@ export function AddMeasurementScreen({ navigation, route }) {
     setSaving(true);
     setError("");
     try {
-      const selectedPhotos = Object.entries(photos).filter(([, asset]) => asset);
-      const uploadedPhotos = await Promise.all(selectedPhotos.map(async ([pose, asset]) => ({
-        pose,
-        photoUrl: await uploadMeasurementPhoto(asset, pose),
-      })));
       await api.post("/measurements", form);
-      await Promise.all(uploadedPhotos.map((photo) => api.post("/progress-photos", {
-        ...photo,
-        takenAt: form.measuredAt,
-        notes: form.notes || null,
-      })));
       navigation.goBack();
     } catch (err) {
       setError(messageFrom(err));
@@ -665,37 +583,16 @@ export function AddMeasurementScreen({ navigation, route }) {
         <Text style={styles.measureGroupTitle}>Observações</Text>
         <TextInput style={styles.notesInput} multiline textAlignVertical="top" value={form.notes} onChangeText={(value) => update("notes", value)} placeholder="Como você se sentiu? Houve algo diferente hoje?" placeholderTextColor={colors.subtle} />
       </View>}
-      <View style={styles.measurePhotoCard}>
-        <View style={styles.measurePhotoHeader}>
-          <View style={styles.measurePhotoIcon}><Camera size={19} color={colors.primaryLight} /></View>
-          <View style={{ flex: 1 }}><View style={styles.measurePhotoTitleRow}><Text style={styles.measureGroupTitle}>Fotos desta avaliação</Text><Text style={styles.optionalPill}>OPCIONAL</Text></View><Text style={styles.measureGroupDescription}>Adicione frente, lado ou costas agora. Você também pode fazer isso depois.</Text></View>
-        </View>
-        <View style={styles.measurePhotoPoses}>
-          {photoPoses.map((pose) => {
-            const asset = photos[pose.key];
-            const active = activePhotoPose === pose.key;
-            return (
-              <Pressable key={pose.key} onPress={() => setActivePhotoPose(pose.key)} style={[styles.measurePhotoPose, active && styles.measurePhotoPoseActive]}>
-                {asset ? <Image source={{ uri: asset.uri }} style={styles.measurePhotoThumb} /> : <Camera size={17} color={active ? colors.primaryLight : colors.subtle} />}
-                <Text style={[styles.measurePhotoPoseText, active && styles.measurePhotoPoseTextActive]}>{pose.label}</Text>
-                {asset ? <View style={styles.measurePhotoCheck}><Check size={10} color={colors.ink} strokeWidth={3} /></View> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.measurePhotoHint}>{photoCount ? `${photoCount} foto${photoCount === 1 ? "" : "s"} pronta${photoCount === 1 ? "" : "s"}` : `Adicionar foto de ${photoPoses.find((pose) => pose.key === activePhotoPose)?.label.toLowerCase()}`}</Text>
-        <View style={styles.measurePhotoActions}>
-          <Pressable style={styles.measurePhotoPrimary} onPress={() => chooseMeasurementPhoto("camera")}><Camera size={17} color={colors.ink} /><Text style={styles.measurePhotoPrimaryText}>Tirar foto</Text></Pressable>
-          <Pressable style={styles.measurePhotoSecondary} onPress={() => chooseMeasurementPhoto("gallery")}><ImagePlus size={17} color={colors.primaryLight} /><Text style={styles.measurePhotoSecondaryText}>Galeria</Text></Pressable>
-        </View>
-      </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <View style={styles.formSubmit}><Button title={saving ? "Salvando..." : photoCount ? `Salvar avaliação e ${photoCount} foto${photoCount === 1 ? "" : "s"}` : "Salvar avaliação"} icon={Scale} onPress={submit} disabled={saving} /></View>
+      <View style={styles.formSubmit}><Button title={saving ? "Salvando..." : "Salvar avaliação"} icon={Scale} onPress={submit} disabled={saving} /></View>
     </Screen>
   );
 }
 
-export function AddPhotoScreen({ navigation }) {
+export function AddPhotoScreen({ navigation, route }) {
+  const moduleId = route.params?.moduleId;
+  const moduleTitle = route.params?.moduleTitle || "Módulo da jornada";
+  const moduleNumber = route.params?.moduleNumber;
   const [assets, setAssets] = useState({ FRONT: null, SIDE: null, BACK: null });
   const [activePose, setActivePose] = useState("FRONT");
   const [notes, setNotes] = useState("");
@@ -728,7 +625,12 @@ export function AddPhotoScreen({ navigation }) {
     try {
       const uploaded = await Promise.all(selected.map(async ([pose, asset]) => ({ pose, photoUrl: await upload(asset, pose) })));
       const takenAt = localDateKey();
-      await Promise.all(uploaded.map((item) => api.post("/progress-photos", { ...item, takenAt, notes: notes || null })));
+      await Promise.all(uploaded.map((item) => api.post("/progress-photos", {
+        ...item,
+        moduleId,
+        takenAt,
+        notes: notes || null,
+      })));
       navigation.goBack();
     } catch (err) {
       setError(messageFrom(err));
@@ -737,10 +639,14 @@ export function AddPhotoScreen({ navigation }) {
     }
   };
   return (
-    <Screen header="Novo registro visual" onBack={navigation.goBack}>
+    <Screen header={moduleNumber ? `Fotos do módulo ${moduleNumber}` : "Novo registro visual"} onBack={navigation.goBack}>
       <View style={styles.photoFormHero}>
         <View style={styles.photoFormHeroIcon}><Camera color={colors.accent} size={22} /></View>
-        <View style={{ flex: 1 }}><Text style={styles.photoFormHeroTitle}>Seu progresso em 3 ângulos</Text><Text style={styles.photoFormLead}>Use a mesma luz, distância e posição. Você pode adicionar uma, duas ou as três fotos.</Text></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.photoFormEyebrow}>{moduleNumber ? `REGISTRO DO MÓDULO ${String(moduleNumber).padStart(2, "0")}` : "REGISTRO DA JORNADA"}</Text>
+          <Text style={styles.photoFormHeroTitle}>{moduleTitle}</Text>
+          <Text style={styles.photoFormLead}>Registre esta etapa em frente, lado ou costas. Use luz, distância e posição parecidas nos próximos módulos.</Text>
+        </View>
         <View style={styles.photoCount}><Text style={styles.photoCountValue}>{selectedCount}/3</Text><Text style={styles.photoCountLabel}>PRONTAS</Text></View>
       </View>
 
@@ -768,7 +674,7 @@ export function AddPhotoScreen({ navigation }) {
           <Pressable style={styles.photoSourceSecondary} onPress={() => choose("gallery")}><ImagePlus size={18} color={colors.primaryLight} /><Text style={styles.photoSourceSecondaryText}>Galeria</Text></Pressable>
         </View>
       </View>
-      <View style={styles.notesCard}><Text style={styles.measureGroupTitle}>Observação</Text><TextInput style={styles.notesInput} multiline textAlignVertical="top" value={notes} onChangeText={setNotes} placeholder="Ex.: início do acompanhamento, 30 dias..." placeholderTextColor={colors.subtle} /></View>
+      <View style={styles.notesCard}><Text style={styles.measureGroupTitle}>Observação</Text><TextInput style={styles.notesInput} multiline textAlignVertical="top" value={notes} onChangeText={setNotes} placeholder="Ex.: como você se sente nesta etapa..." placeholderTextColor={colors.subtle} /></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button title={saving ? "Enviando fotos..." : `Salvar registro${selectedCount ? ` (${selectedCount})` : ""}`} icon={Camera} onPress={submit} disabled={saving} />
     </Screen>
@@ -784,6 +690,33 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.primaryLight, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
   title: { marginTop: 7, color: colors.text, fontFamily: fonts.displayBold, fontSize: 36, lineHeight: 43, letterSpacing: 0.1 },
   lead: { marginTop: 7, maxWidth: 325, color: colors.muted, fontSize: 14, lineHeight: 21 },
+  modulePhotosSection: { marginBottom: 22 },
+  modulePhotosHeading: { marginBottom: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  modulePhotosHeadingIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(245,179,141,.35)", borderRadius: 15, backgroundColor: "rgba(245,179,141,.09)" },
+  modulePhotosTrack: { paddingRight: 17, gap: 11 },
+  modulePhotosTrackSingle: { flexGrow: 1, paddingRight: 0 },
+  modulePhotoCard: { width: 318, minHeight: 190, padding: 14, borderWidth: 1, borderColor: "rgba(245,179,141,.4)", borderRadius: 22, backgroundColor: colors.surface },
+  modulePhotoCardSingle: { width: "100%" },
+  modulePhotoCardTop: { flexDirection: "row", alignItems: "center", gap: 11 },
+  modulePhotoNumber: { width: 55, height: 58, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(245,179,141,.4)", borderRadius: 16, backgroundColor: colors.surface3 },
+  modulePhotoNumberLabel: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 6, letterSpacing: 1 },
+  modulePhotoNumberValue: { marginTop: 2, color: colors.text, fontFamily: fonts.displayBold, fontSize: 22, lineHeight: 25 },
+  modulePhotoTitleWrap: { flex: 1 },
+  modulePhotoTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
+  modulePhotoStatus: { marginTop: 5, color: colors.subtle, fontFamily: fonts.bold, fontSize: 7, letterSpacing: 0.75 },
+  modulePhotoStatusAvailable: { color: colors.success },
+  modulePhotoGallery: { marginTop: 13, flexDirection: "row", gap: 7 },
+  modulePhotoImageWrap: { position: "relative", flex: 1, overflow: "hidden", borderRadius: 14, backgroundColor: colors.surface3 },
+  modulePhotoImage: { width: "100%", aspectRatio: 0.82 },
+  modulePhotoPose: { position: "absolute", left: 5, bottom: 5, paddingVertical: 3, paddingHorizontal: 6, overflow: "hidden", borderRadius: 7, color: colors.text, backgroundColor: "rgba(9,6,5,.78)", fontFamily: fonts.bold, fontSize: 7 },
+  modulePhotoRegistered: { marginTop: 11, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  modulePhotoDate: { flex: 1, color: colors.muted, fontSize: 8, textTransform: "capitalize" },
+  modulePhotoSmallAction: { minHeight: 34, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: 11, backgroundColor: "rgba(245,179,141,.08)" },
+  modulePhotoSmallActionText: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 9 },
+  modulePhotoAvailable: { minHeight: 91, marginTop: 13, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(245,179,141,.5)", borderRadius: 16, backgroundColor: "rgba(245,179,141,.07)" },
+  modulePhotoAvailableIcon: { width: 41, height: 41, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: colors.primaryLight },
+  modulePhotoAvailableTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
+  modulePhotoAvailableText: { marginTop: 3, color: colors.muted, fontSize: 9, lineHeight: 13 },
   initialMeasurementCard: { padding: 22, overflow: "hidden", borderWidth: 1, borderColor: "rgba(232,136,91,.48)", borderRadius: radii.card, backgroundColor: colors.surface },
   initialMeasurementIcon: { width: 58, height: 58, marginBottom: 20, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.primary },
   initialMeasurementEyebrow: { color: colors.primaryLight, fontFamily: fonts.semibold, fontSize: 8, letterSpacing: 1.3 },
@@ -813,22 +746,6 @@ const styles = StyleSheet.create({
   lifetimeStat: { flex: 1, alignItems: "center", gap: 3, borderRightWidth: 1, borderRightColor: colors.line },
   lifetimeStatValue: { marginTop: 2, color: colors.text, fontFamily: fonts.displayBold, fontSize: 16, lineHeight: 19 },
   lifetimeStatLabel: { color: colors.subtle, fontSize: 8, fontWeight: "700" },
-  statsRow: { marginBottom: 14, flexDirection: "row", gap: 8 },
-  statCard: { flex: 1, minHeight: 116, padding: 11, justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.surface },
-  statIcon: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: colors.surface3 },
-  statValue: { marginTop: 8, color: colors.text, fontFamily: fonts.displayBold, fontSize: 24, lineHeight: 29 },
-  statLabel: { marginTop: 2, color: colors.muted, fontSize: 9, fontWeight: "800" },
-  weeklyCard: { marginBottom: 4, padding: 17, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
-  weeklyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  weeklyEyebrow: { color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
-  weeklyTitle: { marginTop: 4, color: colors.text, fontFamily: fonts.display, fontSize: 19, lineHeight: 23 },
-  weekBars: { height: 146, marginTop: 18, flexDirection: "row", alignItems: "flex-end", gap: 7 },
-  weekDay: { flex: 1, height: "100%", alignItems: "center", justifyContent: "flex-end" },
-  barTrack: { width: 16, height: 93, justifyContent: "flex-end", overflow: "hidden", borderRadius: 8, backgroundColor: colors.surface3 },
-  barFill: { width: "100%", borderRadius: 8, backgroundColor: colors.primaryLight },
-  weekValue: { marginTop: 5, color: colors.text, fontSize: 8, fontWeight: "800" },
-  weekLabel: { marginTop: 3, color: colors.subtle, fontSize: 8, textTransform: "capitalize" },
-  weekCaption: { marginTop: 10, color: colors.subtle, fontSize: 9, textAlign: "center" },
   achievements: { marginBottom: 18, flexDirection: "row", gap: 9 },
   achievement: { flex: 1, minHeight: 138, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 20, backgroundColor: colors.surface2 },
   achievementUnlocked: { borderColor: "rgba(232,136,91,.72)", backgroundColor: "rgba(158,63,34,.2)" },
@@ -875,44 +792,10 @@ const styles = StyleSheet.create({
   historyDate: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18, textTransform: "capitalize" },
   latestPill: { paddingVertical: 3, paddingHorizontal: 6, borderRadius: 7, color: colors.ink, backgroundColor: colors.accent, fontSize: 7, fontWeight: "900", overflow: "hidden" },
   historyValues: { marginTop: 5, color: colors.muted, fontSize: 10 },
-  addPhoto: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
-  photos: { flexDirection: "row", gap: 8 },
-  photoWrap: { flex: 1, overflow: "hidden", borderRadius: 15, backgroundColor: colors.surface3 },
-  photo: { width: "100%", aspectRatio: 0.72 },
-  photoLabel: { paddingVertical: 7, alignItems: "center" },
-  photoLabelText: { color: colors.text, fontSize: 9, fontWeight: "800" },
-  photoEmpty: { minHeight: 91, padding: 13, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.input, backgroundColor: colors.surface },
-  photoEmptyIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.surface3 },
-  photoEmptyTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },
-  photoEmptyText: { marginTop: 3, color: colors.muted, fontSize: 10 },
-  comparisonCard: { padding: 15, borderWidth: 1, borderColor: "rgba(245,179,141,.34)", borderRadius: radii.card, backgroundColor: colors.surface },
-  comparisonTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  comparisonEyebrow: { color: colors.primaryLight, fontSize: 8, fontWeight: "900", letterSpacing: 1.15 },
-  comparisonTitle: { marginTop: 5, color: colors.text, fontFamily: fonts.display, fontSize: 20, lineHeight: 24 },
-  comparisonSubtitle: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15, textTransform: "capitalize" },
-  comparisonAdd: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primaryLight },
-  comparisonPeriods: { paddingTop: 15, paddingBottom: 3, gap: 7 },
-  comparisonPeriod: { minHeight: 35, paddingHorizontal: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.surface2 },
-  comparisonPeriodActive: { borderColor: colors.primaryLight, backgroundColor: "rgba(245,179,141,.12)" },
-  comparisonPeriodText: { color: colors.muted, fontSize: 10, fontWeight: "800", textTransform: "capitalize" },
-  comparisonPeriodTextActive: { color: colors.primaryLight },
-  comparisonColumnsHead: { marginTop: 16, paddingBottom: 8, paddingLeft: 35, flexDirection: "row", gap: 8 },
-  comparisonColumnLabel: { flex: 1, color: colors.subtle, fontSize: 8, fontWeight: "900", letterSpacing: 0.7, textAlign: "center", textTransform: "uppercase" },
-  comparisonColumnNow: { color: colors.primaryLight },
-  comparisonPose: { marginBottom: 12 },
-  comparisonPoseLabel: { marginBottom: 6, color: colors.muted, fontSize: 8, fontWeight: "900", letterSpacing: 0.9 },
-  comparisonPair: { flexDirection: "row", gap: 8 },
-  comparisonSlot: { flex: 1, overflow: "hidden", borderWidth: 1, borderColor: colors.line, borderRadius: 15, backgroundColor: colors.surface2 },
-  comparisonImage: { width: "100%", aspectRatio: 0.86 },
-  comparisonMissing: { aspectRatio: 0.86, alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: colors.surface3 },
-  comparisonMissingText: { color: colors.subtle, fontSize: 9, fontWeight: "700" },
-  comparisonSlotLabel: { paddingVertical: 7, alignItems: "center", borderTopWidth: 1, borderTopColor: colors.line },
-  comparisonSlotLabelText: { color: colors.text, fontSize: 9, fontWeight: "900" },
   formHero: { marginBottom: 13, padding: 16, flexDirection: "row", gap: 12, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
   formHeroIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(245,179,141,.15)" },
   formHeroTitleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7 },
   formHeroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
-  optionalPill: { paddingVertical: 3, paddingHorizontal: 6, overflow: "hidden", borderRadius: 7, color: colors.primaryLight, backgroundColor: "rgba(245,179,141,.12)", fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
   requiredPill: { paddingVertical: 3, paddingHorizontal: 7, overflow: "hidden", borderRadius: 7, color: colors.ink, backgroundColor: colors.primaryLight, fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
   formHeroText: { marginTop: 4, color: colors.muted, fontSize: 11, lineHeight: 16 },
   closeMeasurement: { minHeight: 36, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.surface },
@@ -942,27 +825,11 @@ const styles = StyleSheet.create({
   fieldUnit: { color: colors.subtle, fontSize: 10, fontWeight: "800" },
   notesCard: { marginTop: 14, padding: 15, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   notesInput: { minHeight: 91, marginTop: 9, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 13, color: colors.text, fontSize: 12, lineHeight: 18, backgroundColor: colors.surface2 },
-  measurePhotoCard: { marginTop: 18, padding: 15, borderWidth: 1, borderColor: "rgba(245,179,141,.34)", borderRadius: radii.card, backgroundColor: colors.surface },
-  measurePhotoHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
-  measurePhotoIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: colors.surface3 },
-  measurePhotoTitleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7 },
-  measurePhotoPoses: { marginTop: 14, flexDirection: "row", gap: 9 },
-  measurePhotoPose: { position: "relative", flex: 1, height: 82, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 15, backgroundColor: colors.surface2 },
-  measurePhotoPoseActive: { borderColor: colors.primaryLight, backgroundColor: "rgba(245,179,141,.09)" },
-  measurePhotoThumb: { position: "absolute", width: "100%", height: "100%", opacity: 0.54 },
-  measurePhotoPoseText: { paddingHorizontal: 6, paddingVertical: 3, overflow: "hidden", color: colors.subtle, fontFamily: fonts.bold, fontSize: 9, borderRadius: 7, backgroundColor: "rgba(9,6,5,.7)" },
-  measurePhotoPoseTextActive: { color: colors.text },
-  measurePhotoCheck: { position: "absolute", top: 6, right: 6, width: 18, height: 18, alignItems: "center", justifyContent: "center", borderRadius: 9, backgroundColor: colors.success },
-  measurePhotoHint: { marginTop: 12, color: colors.muted, fontFamily: fonts.semibold, fontSize: 9 },
-  measurePhotoActions: { marginTop: 9, flexDirection: "row", gap: 12 },
-  measurePhotoPrimary: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 14, backgroundColor: colors.primaryLight },
-  measurePhotoPrimaryText: { color: colors.ink, fontFamily: fonts.bold, fontSize: 10 },
-  measurePhotoSecondary: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
-  measurePhotoSecondaryText: { color: colors.text, fontFamily: fonts.bold, fontSize: 10 },
   formSubmit: { marginTop: 18, marginBottom: 8 },
   error: { marginVertical: 12, color: colors.danger, fontSize: 12, fontWeight: "700" },
   photoFormHero: { marginBottom: 14, padding: 15, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
   photoFormHeroIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(232,136,91,.16)" },
+  photoFormEyebrow: { marginBottom: 3, color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 7, letterSpacing: 1 },
   photoFormHeroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
   photoFormLead: { marginTop: 4, color: colors.muted, fontSize: 10, lineHeight: 15 },
   photoCount: { minWidth: 47, alignItems: "center" },
@@ -986,14 +853,4 @@ const styles = StyleSheet.create({
   photoSourcePrimaryText: { color: colors.ink, fontFamily: fonts.semibold, fontSize: 11 },
   photoSourceSecondary: { flex: 1, minHeight: 47, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
   photoSourceSecondaryText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 11 },
-  picker: { height: 294, marginBottom: 20, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderStyle: "dashed", borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
-  pickerIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.surface3 },
-  pickerTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
-  pickerText: { color: colors.muted, fontSize: 10 },
-  preview: { width: "100%", height: "100%" },
-  poseRow: { marginTop: 10, marginBottom: 18, flexDirection: "row", gap: 8 },
-  pose: { flex: 1, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.surface },
-  poseActive: { borderColor: colors.primaryLight, backgroundColor: colors.primaryLight },
-  poseText: { color: colors.muted, fontSize: 11, fontWeight: "800" },
-  poseTextActive: { color: colors.ink },
 });

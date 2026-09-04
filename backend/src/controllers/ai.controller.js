@@ -1,9 +1,25 @@
 import { prisma } from "../config/prisma.js";
 import { analyzeFoodImage, createTrainingAdvice, uploadedImageHash } from "../services/ai.service.js";
+import { calculateMetabolism } from "../services/nutrition.service.js";
 import { AppError } from "../utils/AppError.js";
 import { absolutePublicUrl, relativePublicUrl, requestBaseUrl } from "../utils/publicUrl.js";
 
 const numberOrZero = (value) => value == null ? 0 : Number(value);
+const ageFromBirthDate = (birthDate) => {
+  if (!birthDate) return null;
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getUTCFullYear() - birth.getUTCFullYear();
+  const beforeBirthday = today.getUTCMonth() < birth.getUTCMonth()
+    || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return age >= 18 && age <= 100 ? age : null;
+};
+const serializeNutritionProfile = (profile) => profile ? {
+  ...profile,
+  weightKg: Number(profile.weightKg),
+  heightCm: Number(profile.heightCm),
+} : null;
 const serializeEntry = ({ imageHash: _imageHash, ...entry }, baseUrl) => ({
   ...entry,
   photoUrl: absolutePublicUrl(entry.photoUrl, baseUrl),
@@ -24,10 +40,27 @@ const dayRange = (dateValue, offsetValue) => {
 
 export const todayNutrition = async (req, res) => {
   const { date, start, end } = dayRange(req.query.date, req.query.timezoneOffset);
-  const entries = await prisma.calorieEntry.findMany({
-    where: { studentId: req.user.studentId, consumedAt: { gte: start, lt: end } },
-    orderBy: { consumedAt: "desc" },
-  });
+  const [entries, nutritionProfile, latestWeight, latestHeight, student] = await Promise.all([
+    prisma.calorieEntry.findMany({
+      where: { studentId: req.user.studentId, consumedAt: { gte: start, lt: end } },
+      orderBy: { consumedAt: "desc" },
+    }),
+    prisma.nutritionProfile.findUnique({ where: { studentId: req.user.studentId } }),
+    prisma.bodyMeasurement.findFirst({
+      where: { studentId: req.user.studentId, weightKg: { not: null } },
+      orderBy: [{ measuredAt: "desc" }, { createdAt: "desc" }],
+      select: { weightKg: true },
+    }),
+    prisma.bodyMeasurement.findFirst({
+      where: { studentId: req.user.studentId, heightCm: { not: null } },
+      orderBy: [{ measuredAt: "desc" }, { createdAt: "desc" }],
+      select: { heightCm: true },
+    }),
+    prisma.studentProfile.findUnique({
+      where: { id: req.user.studentId },
+      select: { initialHeightCm: true, user: { select: { birthDate: true } } },
+    }),
+  ]);
   const serialized = entries.map((entry) => serializeEntry(entry, requestBaseUrl(req)));
   res.json({
     date,
@@ -35,8 +68,28 @@ export const todayNutrition = async (req, res) => {
     totalProteinGrams: Math.round(serialized.reduce((total, entry) => total + entry.proteinGrams, 0) * 10) / 10,
     totalCarbohydrateGrams: Math.round(serialized.reduce((total, entry) => total + entry.carbohydrateGrams, 0) * 10) / 10,
     totalFatGrams: Math.round(serialized.reduce((total, entry) => total + entry.fatGrams, 0) * 10) / 10,
+    nutritionProfile: serializeNutritionProfile(nutritionProfile),
+    suggestions: {
+      ageYears: ageFromBirthDate(student?.user.birthDate),
+      weightKg: latestWeight?.weightKg == null ? null : Number(latestWeight.weightKg),
+      heightCm: Number(latestHeight?.heightCm ?? student?.initialHeightCm) || null,
+    },
     entries: serialized,
   });
+};
+
+export const saveNutritionProfile = async (req, res) => {
+  const calculated = calculateMetabolism(req.body);
+  const profile = await prisma.nutritionProfile.upsert({
+    where: { studentId: req.user.studentId },
+    create: {
+      ...req.body,
+      ...calculated,
+      studentId: req.user.studentId,
+    },
+    update: { ...req.body, ...calculated },
+  });
+  res.json(serializeNutritionProfile(profile));
 };
 
 export const analyzeNutrition = async (req, res) => {

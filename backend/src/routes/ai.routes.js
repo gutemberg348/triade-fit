@@ -4,7 +4,7 @@ import { authenticate, authorize, requireActiveAccess } from "../middlewares/aut
 import { validate } from "../middlewares/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { idParams } from "../validators/common.validators.js";
-import { nutritionAnalysisSchema, trainingAdviceSchema } from "../validators/ai.validators.js";
+import { nutritionAnalysisSchema, nutritionProfileSchema, trainingAdviceSchema } from "../validators/ai.validators.js";
 import * as controller from "../controllers/ai.controller.js";
 
 const router = Router();
@@ -18,6 +18,7 @@ const aiLimiter = rateLimit({
 });
 
 router.get("/nutrition/today", ...studentOnly, asyncHandler(controller.todayNutrition));
+router.post("/nutrition/profile", ...studentOnly, validate(nutritionProfileSchema), asyncHandler(controller.saveNutritionProfile));
 router.post("/ai/nutrition/analyze", ...studentOnly, aiLimiter, validate(nutritionAnalysisSchema), asyncHandler(controller.analyzeNutrition));
 router.delete("/nutrition/entries/:id", ...studentOnly, validate(idParams, "params"), asyncHandler(controller.deleteNutritionEntry));
 router.get("/ai/training/history", ...studentOnly, asyncHandler(controller.trainingHistory));

@@ -740,9 +740,95 @@ export const listCommunityPosts = async (_req, res) =>
   res.json(
     await prisma.communityPost.findMany({
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { likes: true } } },
+      include: { _count: { select: { likes: true, comments: true } } },
     }),
   );
+
+const communityCommentInclude = {
+  user: { select: { id: true, name: true, avatarUrl: true, role: true } },
+  parent: {
+    select: {
+      id: true,
+      user: { select: { id: true, name: true, avatarUrl: true, role: true } },
+    },
+  },
+};
+
+const serializeAdminCommunityComment = ({ user, parent, userId: _userId, ...comment }, adminId) => ({
+  ...comment,
+  author: user,
+  replyTo: parent ? { id: parent.id, author: parent.user } : null,
+  isMine: user.id === adminId,
+});
+
+const findAdminCommunityPost = async (id) => {
+  const post = await prisma.communityPost.findUnique({
+    where: { id },
+    select: { id: true, status: true },
+  });
+  if (!post) throw new AppError(404, "Publicação não encontrada.");
+  return post;
+};
+
+export const listCommunityPostComments = async (req, res) => {
+  await findAdminCommunityPost(req.params.id);
+  const comments = await prisma.communityPostComment.findMany({
+    where: { postId: req.params.id },
+    orderBy: { createdAt: "asc" },
+    take: 300,
+    include: communityCommentInclude,
+  });
+  res.json(comments.map((comment) => serializeAdminCommunityComment(comment, req.user.id)));
+};
+
+export const listCommunityPostLikes = async (req, res) => {
+  await findAdminCommunityPost(req.params.id);
+  const likes = await prisma.communityPostLike.findMany({
+    where: { postId: req.params.id },
+    orderBy: { createdAt: "desc" },
+    take: 300,
+    select: {
+      id: true,
+      createdAt: true,
+      user: {
+        select: { id: true, name: true, email: true, avatarUrl: true, role: true },
+      },
+    },
+  });
+  res.json(likes.map(({ user, ...like }) => ({ ...like, user })));
+};
+
+export const createCommunityPostComment = async (req, res) => {
+  const post = await findAdminCommunityPost(req.params.id);
+  if (post.status !== "PUBLISHED")
+    throw new AppError(422, "Publique a postagem antes de responder comentários.");
+
+  if (req.body.parentId) {
+    const parent = await prisma.communityPostComment.findFirst({
+      where: { id: req.body.parentId, postId: post.id },
+      select: { id: true },
+    });
+    if (!parent)
+      throw new AppError(422, "O comentário que você tentou responder não está mais disponível.");
+  }
+
+  const comment = await prisma.communityPostComment.create({
+    data: {
+      postId: post.id,
+      userId: req.user.id,
+      parentId: req.body.parentId || null,
+      message: req.body.message,
+    },
+    include: communityCommentInclude,
+  });
+  const commentsCount = await prisma.communityPostComment.count({
+    where: { postId: post.id },
+  });
+  res.status(201).json({
+    comment: serializeAdminCommunityComment(comment, req.user.id),
+    commentsCount,
+  });
+};
 
 export const createCommunityPost = async (req, res) => {
   const post = await prisma.communityPost.create({

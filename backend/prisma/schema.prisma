@@ -131,6 +131,7 @@ model StudentProfile {
   receivedReferral       Referral?               @relation("ReferralStudent")
   paymentOrders          PaymentOrder[]
   calorieEntries         CalorieEntry[]
+  nutritionProfile       NutritionProfile?
   trainingAiMessages     TrainingAiMessage[]
 
   @@index([createdAt])
@@ -155,6 +156,21 @@ model CalorieEntry {
 
   @@index([studentId, consumedAt(sort: Desc)])
   @@index([studentId, imageHash])
+}
+
+model NutritionProfile {
+  id                 String         @id @default(uuid()) @db.Uuid
+  studentId          String         @unique @db.Uuid
+  biologicalSex      String
+  ageYears            Int
+  weightKg            Decimal        @db.Decimal(6, 2)
+  heightCm            Decimal        @db.Decimal(5, 2)
+  activityLevel       String
+  basalCalories       Int
+  dailyCalorieTarget  Int
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  student             StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 model TrainingAiMessage {
@@ -301,6 +317,7 @@ model Module {
   updatedAt       DateTime      @updatedAt
   program         Program       @relation(fields: [programId], references: [id], onDelete: Cascade)
   lessons         Lesson[]
+  progressPhotos  ProgressPhoto[]
 
   @@unique([programId, sortOrder])
   @@index([programId, status])
@@ -445,14 +462,18 @@ model BodyMeasurement {
 model ProgressPhoto {
   id        String         @id @default(uuid()) @db.Uuid
   studentId String         @db.Uuid
+  moduleId  String?        @db.Uuid
   photoUrl  String
   pose      PhotoPose
   takenAt   DateTime       @db.Date
   notes     String?
   createdAt DateTime       @default(now())
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  module    Module?        @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
   @@index([studentId, takenAt(sort: Desc)])
+  @@index([studentId, moduleId, takenAt(sort: Desc)])
+  @@index([moduleId])
 }
 
 model Announcement {

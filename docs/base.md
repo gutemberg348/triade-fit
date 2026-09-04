@@ -2,7 +2,7 @@
 
 > Documento de contexto permanente para desenvolvimento e manutenção.
 >
-> Última revisão completa: **28 de agosto de 2026**.
+> Última revisão completa: **3 de setembro de 2026**.
 
 ## 1. Para que este arquivo existe
 
@@ -24,7 +24,7 @@ Ao concluir uma mudança estrutural, atualize pelo menos as seções afetadas e 
 - um painel web administrativo para a personal, feito com React e Vite;
 - uma API REST em Node.js/Express, ligada a PostgreSQL por Prisma.
 
-O produto cobre cadastro e autenticação, programas de treino, módulos, aulas, meditação guiada, conclusão de aulas, avaliações corporais, gráficos e métricas semanais, conquistas, fotos de progresso, feed da comunidade, avisos, notificações internas e gestão de alunos.
+O produto cobre cadastro e autenticação, programas de treino, módulos, aulas, meditação guiada, conclusão de aulas, avaliações corporais, gráficos, conquistas, fotos de progresso por módulo, feed da comunidade com curtidas/comentários/respostas, avisos, notificações internas, gestão de alunos, contador nutricional por imagem e ajuda de treino com IA por texto, foto ou vídeo.
 
 Modelo mental do sistema:
 
@@ -32,7 +32,8 @@ Modelo mental do sistema:
 App mobile (aluna) ──────┐
                          ├── HTTP/JSON + Bearer JWT ── API Express ── Prisma ── PostgreSQL
 Painel web (personal) ───┘                              │
-                                                       ├── uploads locais
+                                                       ├── uploads locais + ffmpeg
+                                                       ├── OpenAI e Asaas
                                                        └── SMTP opcional
 ```
 
@@ -42,12 +43,13 @@ Não existem chamadas diretas dos clientes ao banco. Toda leitura ou mutação p
 
 Na criação deste documento, o projeto estava funcional como MVP e havia sido validado com:
 
-- schema Prisma válido e migrations aplicadas até `202608280003_remove_lesson_calories`;
+- schema Prisma válido e migrations versionadas até `202609030002_nutrition_metabolism_profile`;
 - seed executado;
-- teste unitário do backend aprovado;
+- 25 testes automatizados do backend aprovados;
 - build de produção do painel aprovado;
 - Expo Doctor com 18 de 18 verificações aprovadas após o alinhamento ao SDK 54;
-- exports iOS e web do Expo SDK 54 aprovados;
+- export web do Expo SDK 54 aprovado após as alterações de IA, evolução e comunidade;
+- análise real de um vídeo de teste concluída com oito quadros distribuídos pela execução;
 - smoke test REST com login de admin e aluna, dashboard, programa, medições e bloqueio administrativo por função.
 
 O PostgreSQL local usa Docker e a porta `5433`. API, painel e Expo são processos de desenvolvimento e precisam ser iniciados quando necessários.
@@ -123,7 +125,8 @@ O repositório usa npm workspaces: `backend`, `admin` e `mobile`.
 | --- | --- |
 | Backend | Node.js 20+, ESM, Express 5, Prisma 6, PostgreSQL 16, Zod 4 |
 | Segurança | JWT, bcryptjs, tokens aleatórios com hash SHA-256, Helmet, CORS, rate limit |
-| Upload/e-mail | Multer 2, armazenamento em disco, Nodemailer 9 |
+| Upload/mídia/e-mail | Multer 2, armazenamento em disco, FFmpeg, Nodemailer 9 |
+| IA | OpenAI Responses API; fotos e quadros extraídos de vídeos |
 | Admin | React 19.1, Vite 7, React Router 7, Axios, Recharts, Lucide |
 | Mobile | Expo SDK 54, React Native 0.81.5, React Navigation 7, Axios |
 | Persistência mobile | AsyncStorage |
@@ -225,6 +228,12 @@ O SDK 54 atual pode ser aberto pelo Expo Go público compatível. Para produçã
 | `ACCESS_TOKEN_TTL` | validade do access token | `15m` |
 | `REFRESH_TOKEN_DAYS` | validade do refresh token opaco | `30` dias |
 | `CORS_ORIGINS` | origens web separadas por vírgula | localhost 5173 e 8081 |
+| `PUBLIC_BASE_URL` | URL pública usada para montar links de uploads e integrações | opcional localmente; HTTPS em produção |
+| `ASAAS_API_KEY` / `ASAAS_ENV` | credencial e ambiente de pagamento | chave somente no backend; `sandbox` por padrão |
+| `ASAAS_WEBHOOK_TOKEN` | autentica notificações do Asaas | mínimo 32 caracteres quando configurado |
+| `OPENAI_API_KEY` | habilita análises da Luna | opcional para iniciar a API, obrigatória para usar IA; nunca vai ao app |
+| `OPENAI_MODEL` | modelo usado pela Luna | `gpt-5.6-luna` |
+| `FFMPEG_PATH` | caminho manual do executável para extrair quadros dos vídeos | opcional; Windows usa `ffmpeg-static`, Docker/Linux usa `ffmpeg` do sistema |
 | `ADMIN_EMAIL` | e-mail do admin criado pelo seed | opcional |
 | `ADMIN_PASSWORD` | senha do admin criado pelo seed | opcional |
 | `SMTP_HOST` | habilita envio de recuperação | vazio desabilita SMTP |
@@ -232,7 +241,7 @@ O SDK 54 atual pode ser aberto pelo Expo Go público compatível. Para produçã
 | `SMTP_USER` / `SMTP_PASS` | credenciais SMTP | opcionais conforme servidor |
 | `SMTP_FROM` | remetente | endereço Triade FIT padrão |
 
-Em produção, segredos devem vir do gerenciador de secrets da infraestrutura, nunca do Git.
+Em produção, segredos devem vir do gerenciador de secrets da infraestrutura ou do `.env.production` ignorado, nunca do Git. Depois de alterar qualquer variável do backend, reinicie a API; uma mudança no arquivo não altera um processo que já está em execução.
 
 ### Admin (`admin/.env`)
 
@@ -250,6 +259,14 @@ EXPO_PUBLIC_WEB_API_URL=http://localhost:3333/api
 ```
 
 Variáveis `EXPO_PUBLIC_*` também são públicas no aplicativo; use apenas configuração de endpoint.
+
+### Artefatos Android (`mobile/eas.json`)
+
+- `eas build --platform android --profile preview` gera APK com distribuição interna, adequado para instalar diretamente e compartilhar por link/WhatsApp;
+- `eas build --platform android --profile production` gera AAB assinado para envio à Play Store e incrementa a versão remota;
+- o artefato fica hospedado no link exibido pelo EAS; não é salvo automaticamente na pasta do projeto;
+- mudanças apenas na API, banco ou painel não exigem novo APK. Mudanças em `mobile/`, dependências nativas/Expo, `app.json`, `eas.json` ou `EXPO_PUBLIC_*` exigem novo build;
+- a VPS não precisa da pasta `mobile/`; o APK/AAB deve ser gerado na máquina de desenvolvimento ou no serviço EAS.
 
 ## 8. Fluxo interno de uma requisição
 
@@ -352,7 +369,15 @@ A medição pode ser criada pela própria aluna ou pelo admin. `recordedById` re
 
 #### `ProgressPhoto`
 
-Guarda URL, pose, data e observações. O binário da imagem não fica no banco; a API atual salva o arquivo em `backend/uploads` e persiste somente a URL.
+Guarda URL, pose, data, observações e `moduleId`. Cada registro visual pertence a um módulo de conteúdo da Home já liberado para a aluna. O binário da imagem não fica no banco; a API atual salva o arquivo em `backend/uploads` e persiste somente a URL. Registros legados sem módulo continuam aceitos no schema, e a migration associa os existentes ao primeiro módulo publicado quando há matrícula compatível.
+
+#### `NutritionProfile`, `CalorieEntry` e `TrainingAiMessage`
+
+`NutritionProfile` guarda os dados confirmados pela aluna para o cálculo metabólico: sexo usado pela fórmula, idade, peso, altura, nível de atividade, TMB estimada e referência calórica diária. Existe no máximo um perfil por aluna e ele pode ser recalculado. A TMB usa Mifflin–St Jeor; a referência diária multiplica a TMB pelo fator da atividade declarada. É uma estimativa para acompanhamento, não uma prescrição alimentar.
+
+`CalorieEntry` registra a foto da refeição, hash da imagem, nome/porção estimados, calorias, macronutrientes, análise e confiança interna. O índice por aluna/hash permite impedir a inclusão duplicada da mesma foto no mesmo dia. A confiança não aparece na interface.
+
+`TrainingAiMessage` persiste o histórico da conversa da Luna por aluna, com papel da mensagem, texto e URLs opcionais de foto ou vídeo. No caso de vídeo, o histórico guarda o arquivo enviado e a resposta textual; os quadros temporários usados na análise são apagados ao final do processamento.
 
 #### `Announcement`, `AnnouncementRecipient` e `Notification`
 
@@ -460,14 +485,17 @@ As rotas de autenticação, exceto logout e troca autenticada, compartilham limi
 | Método | Rota | Uso |
 | --- | --- | --- |
 | `GET` | `/nutrition/today` | total e refeições do dia local da aluna |
+| `POST` | `/nutrition/profile` | calcular ou recalcular TMB e referência diária |
 | `POST` | `/ai/nutrition/analyze` | analisar foto do alimento e criar `CalorieEntry` |
 | `DELETE` | `/nutrition/entries/:id` | remover um alimento do contador |
 | `GET` | `/ai/training/history` | carregar o histórico recente da Luna |
 | `POST` | `/ai/training/advice` | enviar dúvida, foto ou vídeo curto de treino |
 
-As duas rotas de análise exigem acesso ativo e têm limite de 30 requisições por hora/IP. A chave `OPENAI_API_KEY` existe somente no backend; `OPENAI_MODEL` usa `gpt-5.6-luna` por padrão. Fotos são enviadas à Responses API como imagem. Como a Responses API recebe texto e imagens para esse fluxo, o backend usa `ffmpeg` para medir a duração e extrair até oito quadros distribuídos por toda a execução. Os quadros são identificados e enviados em ordem cronológica para a Luna comparar início, meio e fim do movimento. A interface deve sempre explicar que calorias são estimadas e que a ajuda de treino não diagnostica lesões nem substitui personal, fisioterapeuta, nutricionista ou médico.
+As duas rotas de análise exigem acesso ativo e têm limite de 30 requisições por hora/IP. A chave `OPENAI_API_KEY` existe somente no backend; `OPENAI_MODEL` usa `gpt-5.6-luna` por padrão. Fotos são enviadas à Responses API como imagem. Como a Responses API recebe texto e imagens para esse fluxo, o backend usa `ffmpeg` para medir a duração e extrair até oito quadros distribuídos por toda a execução. Os quadros recebem sua posição temporal e são enviados em ordem cronológica para a Luna comparar início, meio e fim do movimento. A resposta persistida para vídeo começa informando quantos quadros foram analisados. A interface deve sempre explicar que calorias são estimadas e que a ajuda de treino não diagnostica lesões nem substitui personal, fisioterapeuta, nutricionista ou médico.
 
-No chat de treino, a pergunta enviada aparece imediatamente e um balão com três pontos animados representa a resposta em processamento. Os atalhos e o prompt priorizam adaptações para limitações conhecidas e exercícios de baixo impacto, sem confundir automaticamente uma limitação prévia com dor aguda. Por exemplo, um polichinelo pode ser adaptado sem salto, com os pés apoiados e movimento de braços; sinais atuais de dor, trauma, inchaço ou perda de força continuam acionando a orientação de interromper e procurar avaliação profissional.
+No desenvolvimento Windows, `ffmpeg-static` fornece o binário. Em Linux/macOS fora do container, `ffmpeg` precisa estar no `PATH` ou ser indicado por `FFMPEG_PATH`. A imagem `backend/Dockerfile` instala o pacote do Alpine. Se a extração falhar, a requisição deve retornar erro operacional; não afirme que um vídeo foi analisado sem quadros válidos.
+
+No chat de treino, o campo de pergunta fica no topo, logo abaixo da apresentação da Luna, sem atalhos de sugestões. A pergunta enviada aparece imediatamente e um balão com três pontos animados representa a resposta em processamento. O prompt prioriza adaptações para limitações conhecidas e exercícios de baixo impacto, sem confundir automaticamente uma limitação prévia com dor aguda. Por exemplo, um polichinelo pode ser adaptado sem salto, com os pés apoiados e movimento de braços; sinais atuais de dor, trauma, inchaço ou perda de força continuam acionando a orientação de interromper e procurar avaliação profissional.
 
 ### Pagamento autenticado
 
@@ -503,9 +531,9 @@ Exemplo para conclusão:
 | --- | --- | --- |
 | `GET` | `/measurements` | histórico decrescente e autor |
 | `POST` | `/measurements` | nova avaliação da própria aluna |
-| `GET` | `/measurements/evolution` | medidas, comparação, totais históricos, atividade dos últimos 7 dias e conquistas |
-| `GET` | `/progress-photos` | fotos mais recentes primeiro |
-| `POST` | `/progress-photos` | registrar metadados de foto já enviada |
+| `GET` | `/measurements/evolution` | medidas, comparação, totais históricos e conquistas |
+| `GET` | `/progress-photos` | fotos mais recentes primeiro, com dados do módulo relacionado |
+| `POST` | `/progress-photos` | registrar metadados de foto em um módulo já liberado |
 
 Exemplo mínimo de medida:
 
@@ -522,7 +550,7 @@ Strings vazias nos campos numéricos são convertidas em `null`. Números precis
 Fluxo de foto em duas etapas:
 
 1. enviar multipart em `POST /uploads`;
-2. enviar a URL recebida, pose, data e observações em `POST /progress-photos`. O mobile repete esse fluxo para cada ângulo selecionado no conjunto (frente, lado e/ou costas).
+2. enviar `photoUrl`, `moduleId`, pose, data e observações em `POST /progress-photos`. O mobile repete esse fluxo para cada ângulo selecionado no conjunto (frente, lado e/ou costas). A API valida matrícula, tipo `CONTENT`, publicação e liberação sequencial do módulo. Por compatibilidade com builds antigos, se `moduleId` for omitido a API usa o último módulo já liberado.
 
 ### Comunidade e avisos da aluna
 
@@ -560,6 +588,9 @@ Fluxo de foto em duas etapas:
 | `GET` | `/admin/community-posts` | listar postagens do feed |
 | `POST` | `/admin/community-posts` | criar postagem do feed |
 | `PUT` | `/admin/community-posts/:id` | editar/publicar postagem do feed |
+| `GET` | `/admin/community-posts/:id/comments` | listar a conversa completa para a administração |
+| `POST` | `/admin/community-posts/:id/comments` | comentar ou responder como administradora usando `parentId` opcional |
+| `GET` | `/admin/community-posts/:id/likes` | listar nome, avatar, e-mail e data de quem curtiu |
 
 Os `DELETE` de conteúdo são soft delete: apenas mudam `status` para `ARCHIVED`. Não apagam linhas nem dados de progresso.
 
@@ -646,7 +677,7 @@ Comportamentos importantes:
 - ficha do aluno permite ativar/inativar, editar dados, redefinir senha com revogação de sessões, excluir com confirmação forte e adicionar avaliação;
 - módulos da Home e programas de treino são geridos separadamente; “excluir” arquiva;
 - a tela de Programas normaliza respostas e registros legados sem `modules`/`lessons` como listas vazias, evitando que um item antigo derrube o painel inteiro;
-- a área Comunidade separa postagens e avisos, permite upload ou URL de imagem e controla publicação/rascunho;
+- a área Comunidade separa postagens e avisos, permite upload ou URL de imagem e controla publicação/rascunho. Cada cartão de postagem mostra totais de curtidas/comentários e abre um modal com abas de **Comentários** e **Curtidas**. A primeira apresenta autoria, datas e conversa aninhada, permitindo à personal comentar ou responder uma mensagem específica como administradora quando a postagem estiver publicada; a segunda lista nome, avatar, e-mail e data de cada curtida;
 - Configurações do app publica textos, imagem de login, banners e preços de Pix/cartão com prévia do cálculo de juros;
 - o cadastro de aulas permite definir conteúdo, treino ou meditação, duração, nível, vídeo por URL/upload, materiais por arquivo/link, atraso de liberação e o formato “prática guiada” ou “somente vídeo”. A área de vídeo mostra progresso do upload, prévia antes de salvar e aceita YouTube, Vimeo ou mídia HTTPS direta; o timeout específico do upload é de 180 segundos;
 - avisos do painel oferecem hoje apenas `ALL` e `ACTIVE_STUDENTS`;
@@ -693,18 +724,18 @@ Responsabilidade das telas:
 - **Cadastro**: pede somente nome, e-mail, senha e confirmação; telefone e código de indicação são opcionais. Não pergunta objetivo/interesse nessa etapa. A validação acontece antes do envio e a resposta `422` da API é exibida no campo correspondente, sem limpar os demais valores digitados;
 - **Início**: carrega `/home-content` e avisos em paralelo; apresenta todas as aulas marcadas como introdutórias em carrossel, módulos com capa/progresso e comunicação recente. Se nenhuma estiver marcada, usa as três primeiras aulas publicadas como contingência;
 - **Treinos**: lista somente programas `TRAINING` e abre as aulas/exercícios diretamente, sem módulo visual;
-- **Calorias**: registra refeições por foto e quantidade consumida, envia a imagem para a Luna e soma no dia as estimativas de calorias, proteínas, carboidratos e gorduras. A API calcula SHA-256 do arquivo e não analisa nem adiciona novamente a mesma foto no mesmo dia. URLs antigas de upload são normalizadas para o host atual ao listar, evitando miniaturas quebradas entre navegador, Expo e produção. Os valores são aproximações visuais, mas a classificação interna de confiança não é exibida na lista; cada registro pode ser removido;
+- **Calorias**: no primeiro acesso, abre no topo o cálculo de TMB com sexo usado pela fórmula, idade, peso, altura e atividade. Data de nascimento e últimas medidas são sugeridas quando existem. Depois do cálculo, o painel compara calorias consumidas com a referência diária estimada, mostra barra de progresso, TMB, saldo e avisos de abaixo, atingido ou acima; o lápis permite recalcular. A referência considera atividade e não deve ser apresentada como prescrição. A tela registra refeições por foto e quantidade consumida, envia a imagem para a Luna e soma calorias e macronutrientes. Há uma única ação principal para foto, com câmera ou galeria. O editor/corte nativo fica desativado para evitar falhas de fabricantes Android; no app nativo, `expo-image-manipulator` reduz imagens grandes e converte JPEG/PNG/HEIC compatível para JPEG antes do multipart. O cliente deixa o Axios definir o boundary do `FormData`, aceita até 120 segundos em redes lentas e mostra falhas de seleção, conversão, prévia ou upload. No navegador são aceitos JPG, PNG e WebP. A API calcula SHA-256 e não adiciona novamente a mesma foto no mesmo dia. A confiança interna não aparece e cada registro pode ser removido;
 - **Aula**: mostra capa/vídeo, duração, nível/categoria, instruções, anterior/próxima e ação de conclusão. Arquivos enviados e URLs de mídia direta usam `expo-video`; links de YouTube/Vimeo são convertidos para reprodução incorporada com `react-native-webview` no Android/iOS e `iframe` na web. O carregamento possui limite de 15 segundos e, em falha, oferece nova tentativa e abertura externa em vez de manter spinner infinito;
 - **Meditação**: uma aula marcada como “prática guiada” abre o cronômetro circular com iniciar, pausar e conclusão automática. Ela é acessada pelo botão da própria aula, não por uma aba inferior;
-- **Evolução**: destaca consistência, aulas, treinos, minutos, dias ativos, gráfico semanal, conquistas, medidas, comparação inicial/atual, histórico e fotos. No painel preenchido, “Nova medida” é uma ação compacta no cabeçalho e a evolução corporal aparece antes do resumo semanal; não existe mais um botão laranja de largura total repetido abaixo do gráfico. Sem nenhuma medição, mostra sempre o onboarding de medidas iniciais e o botão de cadastro; o primeiro registro exige peso e altura, enquanto percentual de gordura e demais medidas são opcionais. A aluna ainda pode fechar o onboarding e voltar depois. Após o primeiro registro, abre o painel completo; registros seguintes continuam aceitando qualquer medida numérica isolada;
-- **Nova medição**: no primeiro acesso abre com Peso e Altura obrigatórios e Gordura opcional. Nos registros seguintes, prioriza Peso, Cintura, Quadril e Gordura; data, observação e medidas detalhadas ficam recolhidas para reduzir atrito, mas todos os campos corporais continuam disponíveis. O mesmo formulário oferece fotos opcionais de frente, lado e costas, enviadas junto do registro da avaliação. A aluna pode usar **Agora não** no convite ou **Fechar** no formulário sem criar um registro, e o convite continuará aparecendo nas próximas visitas até existir a base inicial;
-- **Nova foto**: cria um registro visual com até três imagens no mesmo fluxo (frente, lado e costas), usando câmera ou galeria. A Evolução agrupa as fotos pela data, recomenda como comparação o registro de outro mês e permite selecionar qualquer conjunto anterior recente;
-- **Comunidade**: alterna entre postagens do feed e avisos publicados pelo painel; imagens abrem em visualização ampliada. Cada publicação mostra totais de curtidas e comentários. A aluna pode curtir/descurtir, abrir a lista com nomes e avatares de quem curtiu, comentar e responder comentários; respostas são agrupadas imediatamente abaixo do comentário respondido, com recuo visual;
+- **Evolução**: começa pelo registro visual organizado por módulos da Home. O módulo 1 oferece seu conjunto de fotos; cada módulo seguinte ganha seu próprio espaço somente quando a regra de liberação permitir. Cartões bloqueados explicam o requisito e a interface exibe apenas fotos reais, sem montar comparação entre imagem e espaço vazio. A seção “Ritmo da semana” foi removida. Abaixo permanecem consistência acumulada, conquistas, gráfico e histórico de medidas. Cintura, quadril e gordura só aparecem no seletor/gráfico e no resumo quando possuem algum valor cadastrado. Sem nenhuma medição, o onboarding continua pedindo peso e altura como base, com gordura opcional, e pode ser fechado para voltar depois;
+- **Nova medição**: no primeiro acesso abre com Peso e Altura obrigatórios e Gordura opcional. Nos registros seguintes, prioriza Peso e Gordura; altura, cintura, quadril e demais circunferências ficam recolhidas em **Adicionar mais medidas** e só passam a aparecer na Evolução depois de preenchidas. As fotos não ficam neste formulário. A aluna pode usar **Agora não** no convite ou **Fechar** no formulário sem criar um registro, e o convite continuará aparecendo nas próximas visitas até existir a base inicial;
+- **Nova foto**: é aberta pelo cartão do módulo já liberado e cria um registro visual daquela etapa com até três imagens no mesmo fluxo (frente, lado e costas), usando câmera ou galeria. A tela mostra somente os ângulos efetivamente salvos e permite atualizar o conjunto do módulo, sem comparação automática com posições ausentes;
+- **Comunidade**: alterna entre postagens do feed e avisos publicados pelo painel; imagens abrem em visualização ampliada. Cada publicação mostra totais de curtidas e comentários. A aluna pode curtir/descurtir, abrir a lista com nomes e avatares de quem curtiu, comentar e responder comentários. O cliente monta uma árvore por `parentId`, portanto cada resposta aparece imediatamente abaixo do comentário correspondente, com recuo visual, em vez de ser solta no final da lista;
 - **Perfil**: exibe conta, edita dados e avatar, troca senha e encerra sessão.
 
 O aplicativo Android está configurado como `com.triadefit.app`, em orientação retrato e tema escuro. O ícone principal é `mobile/assets/icon-essenza.png`; a splash usa `mobile/assets/splash.png`.
 
-Em agosto de 2026, as telas mobile de home, programas e evolução foram redesenhadas com metadados visuais de aula, números/ícones com hierarquia editorial, métricas históricas e semanais, conquistas, barras de progresso acessíveis, cartão de gráfico com escala/data, resumo de variação, histórico legível e cadastro de medidas em camadas. Programas usam apresentação de catálogo: módulos têm capa ampla e capítulos possuem miniatura numerada, ícone de estado, metadados e estado bloqueado. A tela do capítulo exibe arquivos/links em uma seção própria. A tela `MeditationSessionScreen` é acessada dentro da aula quando o admin habilita a prática guiada; o feed de comunidade também foi incluído. O app carrega Inter via `@expo-google-fonts/inter` no `App.js`; ao criar novas telas, use os tokens de `theme/index.js`, os componentes de `components/UI.js`, a paleta carvão/cobre e contraste alto. Não use fonte serif.
+Em agosto e setembro de 2026, as telas mobile de home, programas e evolução foram redesenhadas com metadados visuais de aula, números/ícones com hierarquia editorial, métricas históricas, conquistas, fotos por módulo, barras de progresso acessíveis, cartão de gráfico com escala/data, resumo de variação, histórico legível e cadastro de medidas em camadas. Programas usam apresentação de catálogo: módulos têm capa ampla e capítulos possuem miniatura numerada, ícone de estado, metadados e estado bloqueado. A tela do capítulo exibe arquivos/links em uma seção própria. A tela `MeditationSessionScreen` é acessada dentro da aula quando o admin habilita a prática guiada; o feed de comunidade também foi incluído. O app carrega Inter via `@expo-google-fonts/inter` no `App.js`; ao criar novas telas, use os tokens de `theme/index.js`, os componentes de `components/UI.js`, a paleta carvão/cobre e contraste alto. Não use fonte serif.
 
 As imagens padrão da dona e da campanha ficam em `backend/public/brand`: `triade-fit-login.png`, `triade-fit-home.png`, `triade-fit-focus.png` e `triade-fit-balance.png`. Elas foram preparadas para login, home e capas de módulos, sem texto embutido, permitindo sobreposição de UI nativa. O admin pode substituí-las por upload/URL a qualquer momento.
 
@@ -888,6 +919,8 @@ Esta lista é deliberadamente explícita para impedir que limitações sejam con
 - Vários tokens de recuperação podem coexistir até uso/expiração. Uma nova solicitação não invalida as anteriores.
 - Não há transação entre salvar arquivo e criar registro da foto; falha na segunda etapa deixa arquivo órfão.
 - `sortOrder` informado manualmente pode gerar conflito de unicidade; não há endpoint de reordenação atômica.
+- A análise nutricional é uma estimativa visual e pode errar porções, ingredientes ocultos e método de preparo. A confiança continua armazenada para uso interno, mas não é exibida à aluna.
+- A análise de vídeo usa até oito imagens extraídas, não o áudio nem todos os frames do arquivo. Ela ajuda a observar posições visíveis, mas não equivale a uma avaliação biomecânica presencial.
 
 ### Qualidade e operação
 
@@ -956,6 +989,15 @@ Esta lista é deliberadamente explícita para impedir que limitações sejam con
 - confirme que a URL usa host alcançável pelo cliente;
 - confira diretório `backend/uploads` e rota estática `/uploads`;
 - em produção, não dependa de filesystem efêmero.
+
+### Luna diz que a chave não foi configurada ou retorna `500`
+
+- confirme `OPENAI_API_KEY` no arquivo carregado pelo processo correto: `backend/.env` localmente ou `.env.production` com Compose;
+- reinicie/recrie a API depois de editar o ambiente;
+- no Docker, confira sem imprimir o segredo: `docker compose --env-file .env.production -f docker-compose.production.yml exec api sh -lc 'test -n "$OPENAI_API_KEY" && echo configurada || echo ausente'`;
+- veja `docker compose --env-file .env.production -f docker-compose.production.yml logs -f api` para distinguir chave recusada, modelo inválido, limite de uso e falha de rede;
+- se o erro ocorrer somente em vídeo, confirme `ffmpeg -version` dentro do container ou o `FFMPEG_PATH` no ambiente local;
+- nunca cole a chave em captura, conversa, `mobile/.env` ou variável `EXPO_PUBLIC_*`. Se isso ocorrer, revogue-a e gere outra.
 
 ### Migration falha
 
@@ -1043,7 +1085,7 @@ Erros conhecidos do gateway são `AppError` operacionais e podem ser mostrados a
 
 Antes do primeiro uso real:
 
-1. trocar todas as credenciais seed e segredos JWT;
+1. trocar todas as credenciais seed e segredos JWT e revogar qualquer chave que já tenha sido exposta;
 2. usar PostgreSQL gerenciado com TLS, backup e restauração testada;
 3. hospedar API em HTTPS e restringir `CORS_ORIGINS`;
 4. mover uploads para armazenamento de objetos privado, com URLs controladas;
@@ -1054,19 +1096,20 @@ Antes do primeiro uso real:
 9. criar CI para testes, build, migration e auditoria;
 10. testar recovery, rotação de token, inativação, permissões e restauração de backup;
 11. substituir URLs localhost dos dados seedados;
-12. criar credenciais administrativas fora do seed destrutivo.
+12. criar credenciais administrativas fora do seed destrutivo;
+13. configurar `OPENAI_API_KEY`, confirmar `ffmpeg` na imagem e testar uma foto de alimento e um vídeo curto sem registrar segredos nos logs.
 
 ## 24. Publicação em VPS com containers
 
 O modo de produção em VPS usa `docker-compose.production.yml`, separado do `docker-compose.yml` local. Ele cria três containers: `triade-fit-api` (Node/Express/Prisma), `triade-fit-postgres` (PostgreSQL 16) e `triade-fit-admin` (React/Vite entregue por Nginx interno). Os bots existentes continuam sob PM2 e não são gerenciados por esse Compose.
 
-- `backend/Dockerfile` instala apenas o workspace do backend, gera o Prisma Client e, ao iniciar, executa `prisma migrate deploy`; `seed` nunca é executado automaticamente porque apaga dados demonstrativos e reais.
+- `backend/Dockerfile` instala apenas o workspace do backend, gera o Prisma Client, instala `ffmpeg` e, ao iniciar, executa `prisma migrate deploy`; `seed` nunca é executado automaticamente porque apaga dados demonstrativos e reais.
 - `triade_fit_postgres` e `triade_fit_uploads` são volumes nomeados que preservam banco e arquivos locais entre reinícios. `docker compose down -v` remove esses volumes e não pode ser usado em produção.
 - PostgreSQL não publica porta externa. A API publica apenas `127.0.0.1:${TRIADE_API_PORT}:3333`; Nginx/Caddy no host deve prover HTTPS e encaminhar para essa porta.
-- O admin usa `127.0.0.1:${TRIADE_ADMIN_PORT}:80`; o Nginx do host entrega `https://admin.triade-fit.com`. `VITE_API_URL` é pública e é incorporada durante o build estático do painel.
-- O backend continua na porta interna `3333`. Se o host já a utiliza, altere apenas `TRIADE_API_PORT` (por exemplo, `3340`) e ajuste o proxy; a URL pública permanece `https://api.triade-fit.com`.
-- Os valores de produção ficam exclusivamente em `.env.production`, criado a partir de `.env.production.example` e ignorado pelo Git. Incluem `DATABASE_URL` com host `postgres`, segredos JWT, domínios CORS, `PUBLIC_BASE_URL`, SMTP e credenciais Asaas de produção.
-- O app Android de produção deve receber `EXPO_PUBLIC_API_URL=https://api.triade-fit.com/api`; chaves do Asaas nunca entram no Expo nem no painel.
+- O admin usa `127.0.0.1:${TRIADE_ADMIN_PORT}:80`; o Nginx do host entrega `https://admin-triade-fit.testes-techcode.shop`. `VITE_API_URL` é pública e é incorporada durante o build estático do painel.
+- O backend continua na porta interna `3333`. Se o host já a utiliza, altere apenas `TRIADE_API_PORT` (por exemplo, `3340`) e ajuste o proxy; a URL pública permanece `https://triade-api.testes-techcode.shop`.
+- Os valores de produção ficam exclusivamente em `.env.production`, criado a partir de `.env.production.example` e ignorado pelo Git. Incluem `DATABASE_URL` com host `postgres`, segredos JWT, domínios CORS, `PUBLIC_BASE_URL`, SMTP e credenciais Asaas/OpenAI.
+- O app Android de produção deve receber `EXPO_PUBLIC_API_URL=https://triade-api.testes-techcode.shop/api`; chaves do Asaas e da OpenAI nunca entram no Expo nem no painel.
 - Na primeira base vazia, `npm --workspace backend run admin:create` usa `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` para criar o administrador sem o comportamento destrutivo de `seed`.
 
 O roteiro operacional e o exemplo Nginx estão em `docs/deploy-docker.md` e `deploy/nginx/triade-fit.conf.example`.
