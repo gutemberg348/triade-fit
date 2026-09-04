@@ -59,13 +59,10 @@ const measurementFieldKeys = measurementGroups.flatMap((group) =>
 
 const quickMeasurementFields = [
   ["weightKg", "Peso", "kg"],
-  ["bodyFatPercent", "Gordura", "%"],
 ];
 
 const initialMeasurementFields = [
   ["weightKg", "Peso *", "kg"],
-  ["heightCm", "Altura *", "cm"],
-  ["bodyFatPercent", "Gordura (opcional)", "%"],
 ];
 
 const photoPoses = [
@@ -78,7 +75,7 @@ const additionalMeasurementGroups = [
   {
     title: "Outras medidas",
     description: "Opcional: adicione apenas os dados que quiser acompanhar.",
-    fields: [["heightCm", "Altura", "cm"], ...measurementGroups[1].fields],
+    fields: [["heightCm", "Altura", "cm"], ["bodyFatPercent", "Gordura", "%"], ...measurementGroups[1].fields],
   },
   measurementGroups[2],
 ];
@@ -258,9 +255,9 @@ function TrendChart({ data, field, unit }) {
   );
 }
 
-function InputField({ label, unit, value, onChangeText }) {
+function InputField({ label, unit, value, onChangeText, fullWidth = false }) {
   return (
-    <View style={styles.fieldWrap}>
+    <View style={[styles.fieldWrap, fullWidth && styles.fieldWrapFull]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.fieldControl}>
         <TextInput
@@ -312,9 +309,9 @@ export function EvolutionScreen({ navigation }) {
           <View style={styles.initialMeasurementIcon}><ClipboardList size={29} color={colors.text} /></View>
           <Text style={styles.initialMeasurementEyebrow}>PRIMEIRO PASSO</Text>
           <Text style={styles.initialMeasurementTitle}>Cadastre suas medidas iniciais</Text>
-          <Text style={styles.initialMeasurementText}>Informe peso e altura para criar sua base. O percentual de gordura é opcional e pode ser adicionado agora ou depois.</Text>
+          <Text style={styles.initialMeasurementText}>Informe seu peso para criar a base. Altura, percentual de gordura e outras medidas podem ser adicionados depois.</Text>
           <View style={styles.initialMeasurementBenefits}>
-            {["Peso e altura formam sua base", "Gordura corporal é opcional", "Outras medidas ficam nas opções extras"].map((label) => (
+            {["Somente o peso é necessário", "Gordura corporal fica no avançado", "Outras medidas continuam opcionais"].map((label) => (
               <View style={styles.initialMeasurementBenefit} key={label}><View style={styles.initialMeasurementDot} /><Text style={styles.initialMeasurementBenefitText}>{label}</Text></View>
             ))}
           </View>
@@ -370,35 +367,6 @@ export function EvolutionScreen({ navigation }) {
       </View>
 
       <ModulePhotoJourney modules={state.modules} photos={state.photos} onAdd={openModulePhoto} />
-
-      <View style={styles.lifetimeCard}>
-        <View style={styles.lifetimeTop}>
-          <View style={styles.lifetimeIcon}><Trophy size={24} color={colors.accent} strokeWidth={2.35} /></View>
-          <View style={styles.lifetimeCopy}>
-            <Text style={styles.lifetimeEyebrow}>SUA JORNADA</Text>
-            <Text style={styles.lifetimeTitle}>Consistência acumulada</Text>
-          </View>
-          <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>ATIVO</Text></View>
-        </View>
-        <View style={styles.lifetimeNumberRow}>
-          <Text style={styles.lifetimeNumber}>{formatNumber(totals.sessions)}</Text>
-          <Text style={styles.lifetimeUnit}>aulas</Text>
-        </View>
-        <Text style={styles.lifetimeDescription}>Cada aula concluída registra mais um passo real na sua evolução.</Text>
-        <View style={styles.lifetimeStats}>
-          {[
-            [Dumbbell, formatNumber(totals.workouts), "treinos"],
-            [Clock3, formatNumber(totals.minutes), "minutos"],
-            [CalendarDays, formatNumber(totals.activeDays), "dias ativos"],
-          ].map(([Icon, value, label]) => (
-            <View style={styles.lifetimeStat} key={label}>
-              <Icon size={15} color={colors.primaryLight} />
-              <Text style={styles.lifetimeStatValue}>{value}</Text>
-              <Text style={styles.lifetimeStatLabel}>{label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
 
       <View style={styles.sectionHead}>
         <View>
@@ -485,6 +453,35 @@ export function EvolutionScreen({ navigation }) {
         ))
       ) : <Empty title="Registre sua primeira medida" text="Acompanhe sua evolução com dados que fazem sentido para você." />}
 
+      <View style={[styles.lifetimeCard, styles.lifetimeCardBottom]}>
+        <View style={styles.lifetimeTop}>
+          <View style={styles.lifetimeIcon}><Trophy size={24} color={colors.accent} strokeWidth={2.35} /></View>
+          <View style={styles.lifetimeCopy}>
+            <Text style={styles.lifetimeEyebrow}>SUA JORNADA</Text>
+            <Text style={styles.lifetimeTitle}>Consistência acumulada</Text>
+          </View>
+          <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>ATIVO</Text></View>
+        </View>
+        <View style={styles.lifetimeNumberRow}>
+          <Text style={styles.lifetimeNumber}>{formatNumber(totals.sessions)}</Text>
+          <Text style={styles.lifetimeUnit}>aulas</Text>
+        </View>
+        <Text style={styles.lifetimeDescription}>Cada aula concluída registra mais um passo real na sua evolução.</Text>
+        <View style={styles.lifetimeStats}>
+          {[
+            [Dumbbell, formatNumber(totals.workouts), "treinos"],
+            [Clock3, formatNumber(totals.minutes), "minutos"],
+            [CalendarDays, formatNumber(totals.activeDays), "dias ativos"],
+          ].map(([Icon, value, label]) => (
+            <View style={styles.lifetimeStat} key={label}>
+              <Icon size={15} color={colors.primaryLight} />
+              <Text style={styles.lifetimeStatValue}>{value}</Text>
+              <Text style={styles.lifetimeStatLabel}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
     </Screen>
   );
 }
@@ -500,18 +497,30 @@ export function AddMeasurementScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showDate, setShowDate] = useState(false);
+  const [photoModule, setPhotoModule] = useState(null);
   const completeFields = useMemo(
     () => measurementFieldKeys.filter((key) => form[key] !== "").length,
     [form],
   );
   const essentialFields = isInitial ? initialMeasurementFields : quickMeasurementFields;
-  const detailGroups = isInitial
-    ? additionalMeasurementGroups.map((group) => ({ ...group, fields: group.fields.filter(([key]) => key !== "heightCm") }))
-    : additionalMeasurementGroups;
+  const detailGroups = additionalMeasurementGroups;
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    api.get("/home-content").then(({ data }) => {
+      if (!active) return;
+      const available = (data.modules || []).flatMap((module, index) => (
+        module.availability?.isLocked ? [] : [{ ...module, moduleNumber: index + 1 }]
+      ));
+      setPhotoModule(available[available.length - 1] || null);
+    }).catch(() => {
+      if (active) setPhotoModule(null);
+    });
+    return () => { active = false; };
+  }, []));
   const update = (key, value) => setForm((old) => ({ ...old, [key]: value }));
   const submit = async () => {
-    if (isInitial && (!form.weightKg || !form.heightCm)) {
-      setError("Informe seu peso e sua altura para criar o ponto de partida. A gordura corporal é opcional.");
+    if (isInitial && !form.weightKg) {
+      setError("Informe seu peso para criar o ponto de partida.");
       return;
     }
     if (!completeFields) {
@@ -544,8 +553,8 @@ export function AddMeasurementScreen({ navigation, route }) {
       <View style={styles.formHero}>
         <View style={styles.formHeroIcon}><CalendarDays size={20} color={colors.accent} /></View>
         <View style={{ flex: 1 }}>
-          <View style={styles.formHeroTitleRow}><Text style={styles.formHeroTitle}>{isInitial ? "Seu ponto de partida" : "Seu registro de hoje"}</Text>{isInitial && <Text style={styles.requiredPill}>2 DADOS</Text>}</View>
-          <Text style={styles.formHeroText}>{isInitial ? "Peso e altura são necessários para iniciar. A gordura corporal é opcional; você pode fechar e voltar depois." : "Preencha somente o que desejar. Seu histórico anterior permanece preservado."}</Text>
+          <View style={styles.formHeroTitleRow}><Text style={styles.formHeroTitle}>{isInitial ? "Seu ponto de partida" : "Seu registro de hoje"}</Text>{isInitial && <Text style={styles.requiredPill}>1 DADO</Text>}</View>
+          <Text style={styles.formHeroText}>{isInitial ? "Informe seu peso para iniciar. Altura, gordura corporal e outras medidas são opcionais." : "Informe seu peso. Se desejar, abra as opções avançadas ou atualize as fotos do módulo."}</Text>
         </View>
       </View>
       <Pressable style={styles.dateShortcut} onPress={() => setShowDate((value) => !value)}>
@@ -558,17 +567,17 @@ export function AddMeasurementScreen({ navigation, route }) {
           <TextInput style={styles.dateInput} value={form.measuredAt} onChangeText={(value) => update("measuredAt", value)} placeholder="AAAA-MM-DD" placeholderTextColor={colors.subtle} />
         </View>
       )}
-      <View style={styles.formProgress}><Text style={styles.formProgressText}>{isInitial ? `${[form.weightKg, form.heightCm].filter(Boolean).length} de 2 essenciais` : `${Math.max(0, completeFields)} medida${completeFields === 1 ? "" : "s"} preenchida${completeFields === 1 ? "" : "s"}`}</Text><Text style={styles.formProgressOptional}>{isInitial ? "gordura é opcional" : "preencha só o necessário"}</Text></View>
+      <View style={styles.formProgress}><Text style={styles.formProgressText}>{isInitial ? `${form.weightKg ? 1 : 0} de 1 essencial` : `${Math.max(0, completeFields)} medida${completeFields === 1 ? "" : "s"} preenchida${completeFields === 1 ? "" : "s"}`}</Text><Text style={styles.formProgressOptional}>demais medidas são opcionais</Text></View>
 
       <View style={styles.measureGroup}>
-        <Text style={styles.measureGroupTitle}>{isInitial ? "Base da sua evolução" : "Medidas essenciais"}</Text>
-        <Text style={styles.measureGroupDescription}>{isInitial ? "Informe peso e altura. Se souber, acrescente o percentual de gordura." : "Registre uma ou mais medidas para criar seu ponto de comparação."}</Text>
-        <View style={styles.fieldsGrid}>{essentialFields.map(([key, label, unit]) => <InputField key={key} label={label} unit={unit} value={form[key]} onChangeText={(value) => update(key, value)} />)}</View>
+        <Text style={styles.measureGroupTitle}>{isInitial ? "Base da sua evolução" : "Peso de hoje"}</Text>
+        <Text style={styles.measureGroupDescription}>Registre o peso para acompanhar sua evolução de forma simples.</Text>
+        <View style={styles.fieldsGrid}>{essentialFields.map(([key, label, unit]) => <InputField key={key} label={label} unit={unit} value={form[key]} onChangeText={(value) => update(key, value)} fullWidth />)}</View>
       </View>
 
       <Pressable style={styles.addDetails} onPress={() => setShowDetails((value) => !value)}>
         <View style={styles.addDetailsIcon}><CirclePlus size={19} color={colors.ink} /></View>
-        <View style={{ flex: 1 }}><Text style={styles.addDetailsTitle}>{showDetails ? "Ocultar medidas extras" : "Adicionar mais medidas"}</Text><Text style={styles.addDetailsText}>Braços, coxas, panturrilhas e outras circunferências.</Text></View>
+        <View style={{ flex: 1 }}><Text style={styles.addDetailsTitle}>{showDetails ? "Ocultar medidas avançadas" : "Adicionar mais medidas"}</Text><Text style={styles.addDetailsText}>Altura, gordura, circunferências, membros e observações.</Text></View>
         <ChevronRight size={19} color={colors.primaryLight} style={showDetails && { transform: [{ rotate: "90deg" }] }} />
       </Pressable>
       {showDetails && detailGroups.map((group) => (
@@ -583,6 +592,20 @@ export function AddMeasurementScreen({ navigation, route }) {
         <Text style={styles.measureGroupTitle}>Observações</Text>
         <TextInput style={styles.notesInput} multiline textAlignVertical="top" value={form.notes} onChangeText={(value) => update("notes", value)} placeholder="Como você se sentiu? Houve algo diferente hoje?" placeholderTextColor={colors.subtle} />
       </View>}
+      {photoModule ? (
+        <Pressable
+          style={styles.measurePhotoShortcut}
+          onPress={() => navigation.navigate("AddPhoto", {
+            moduleId: photoModule.id,
+            moduleTitle: photoModule.title,
+            moduleNumber: photoModule.moduleNumber,
+          })}
+        >
+          <View style={styles.measurePhotoShortcutIcon}><Camera size={20} color={colors.text} /></View>
+          <View style={{ flex: 1 }}><Text style={styles.measurePhotoShortcutEyebrow}>REGISTRO VISUAL</Text><Text style={styles.measurePhotoShortcutTitle}>Adicionar ou atualizar fotos</Text><Text style={styles.measurePhotoShortcutText}>Módulo {String(photoModule.moduleNumber).padStart(2, "0")} · {photoModule.title}</Text></View>
+          <ChevronRight size={19} color={colors.primaryLight} />
+        </Pressable>
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.formSubmit}><Button title={saving ? "Salvando..." : "Salvar avaliação"} icon={Scale} onPress={submit} disabled={saving} /></View>
     </Screen>
@@ -730,6 +753,7 @@ const styles = StyleSheet.create({
   skipMeasurement: { minHeight: 43, alignItems: "center", justifyContent: "center", borderRadius: 13 },
   skipMeasurementText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 12 },
   lifetimeCard: { marginBottom: 10, padding: 17, borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: radii.card, backgroundColor: colors.surface },
+  lifetimeCardBottom: { marginTop: 19, marginBottom: 0 },
   lifetimeTop: { flexDirection: "row", alignItems: "center", gap: 11 },
   lifetimeIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: 16, backgroundColor: "rgba(245,179,141,.08)" },
   lifetimeCopy: { flex: 1 },
@@ -819,12 +843,18 @@ const styles = StyleSheet.create({
   addDetailsTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
   addDetailsText: { marginTop: 2, color: colors.muted, fontSize: 9, lineHeight: 14 },
   fieldWrap: { width: "48.5%" },
+  fieldWrapFull: { width: "100%" },
   fieldLabel: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.55 },
   fieldControl: { height: 46, marginTop: 6, paddingLeft: 11, paddingRight: 9, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.surface2 },
   fieldInput: { flex: 1, height: "100%", color: colors.text, fontSize: 13, fontWeight: "800" },
   fieldUnit: { color: colors.subtle, fontSize: 10, fontWeight: "800" },
   notesCard: { marginTop: 14, padding: 15, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, backgroundColor: colors.surface },
   notesInput: { minHeight: 91, marginTop: 9, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 13, color: colors.text, fontSize: 12, lineHeight: 18, backgroundColor: colors.surface2 },
+  measurePhotoShortcut: { marginTop: 14, minHeight: 82, padding: 14, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: "rgba(245,179,141,.42)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },
+  measurePhotoShortcutIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primary },
+  measurePhotoShortcutEyebrow: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 7, letterSpacing: 1 },
+  measurePhotoShortcutTitle: { marginTop: 3, color: colors.text, fontFamily: fonts.display, fontSize: 16, lineHeight: 20 },
+  measurePhotoShortcutText: { marginTop: 2, color: colors.muted, fontSize: 9 },
   formSubmit: { marginTop: 18, marginBottom: 8 },
   error: { marginVertical: 12, color: colors.danger, fontSize: 12, fontWeight: "700" },
   photoFormHero: { marginBottom: 14, padding: 15, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: "rgba(245,179,141,.32)", borderRadius: radii.card, backgroundColor: "rgba(245,179,141,.08)" },

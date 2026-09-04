@@ -156,7 +156,11 @@ export default function NoticeScreen() {
       setState((current) => ({
         ...current,
         posts: current.posts.map((post) => post.id === postId
-          ? { ...post, commentsCount: data.commentsCount }
+          ? {
+              ...post,
+              commentsCount: data.commentsCount,
+              previewComments: [...(post.previewComments || []), data.comment].slice(-3),
+            }
           : post),
       }));
       setCommentText("");
@@ -454,6 +458,30 @@ function CommunityFeed({ items, onToggleLike, likingId, onPreview, onOpenConvers
           <Text style={styles.engagementText}>{item.commentsCount || 0} comentário{item.commentsCount === 1 ? "" : "s"}</Text>
         </Pressable>
       </View>
+      <Pressable style={styles.inlineComments} onPress={() => onOpenConversation(item, "comments")}>
+        {(item.previewComments || []).length ? (
+          <>
+            {(item.previewComments || []).map((comment) => (
+              <View style={styles.inlineCommentRow} key={comment.id}>
+                <ProfileAvatar name={comment.author.name} uri={comment.author.avatarUrl} small />
+                <View style={styles.inlineCommentBubble}>
+                  <Text style={styles.inlineCommentAuthor}>{comment.author.name}</Text>
+                  {comment.replyTo ? <Text style={styles.inlineCommentReply}>Em resposta a {comment.replyTo.author.name}</Text> : null}
+                  <Text style={styles.inlineCommentMessage} numberOfLines={3}>{comment.message}</Text>
+                </View>
+              </View>
+            ))}
+            {item.commentsCount > item.previewComments.length ? (
+              <Text style={styles.viewAllComments}>Ver todos os {item.commentsCount} comentários</Text>
+            ) : null}
+          </>
+        ) : (
+          <View style={styles.inlineCommentEmpty}>
+            <MessageCircle size={16} color={colors.primaryLight} />
+            <Text style={styles.inlineCommentEmptyText}>Seja a primeira pessoa a comentar</Text>
+          </View>
+        )}
+      </Pressable>
     </View>
   ));
 }
@@ -538,6 +566,15 @@ const styles = StyleSheet.create({
   likeButtonPressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
   engagementText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 10 },
   commentButton: { minHeight: 38, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 7 },
+  inlineComments: { paddingHorizontal: 12, paddingTop: 11, paddingBottom: 13, gap: 9, borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface2 },
+  inlineCommentRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  inlineCommentBubble: { flex: 1, paddingVertical: 9, paddingHorizontal: 11, borderRadius: 14, borderTopLeftRadius: 5, backgroundColor: colors.surface3 },
+  inlineCommentAuthor: { color: colors.text, fontFamily: fonts.bold, fontSize: 9 },
+  inlineCommentReply: { marginTop: 2, color: colors.primaryLight, fontSize: 7 },
+  inlineCommentMessage: { marginTop: 3, color: colors.muted, fontSize: 10, lineHeight: 15 },
+  viewAllComments: { marginLeft: 42, color: colors.primaryLight, fontFamily: fonts.semibold, fontSize: 9 },
+  inlineCommentEmpty: { minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  inlineCommentEmptyText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 9 },
   previewLayer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 18, backgroundColor: "rgba(0,0,0,.94)" },
   previewBackdrop: { position: "absolute", inset: 0 },
   previewImage: { width: "100%", height: "82%" },

@@ -38,15 +38,31 @@ export const communityPosts = async (req, res) => {
           where: { userId: req.user.id },
           select: { id: true },
         },
+        comments: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true } },
+            parent: {
+              select: {
+                id: true,
+                user: { select: { id: true, name: true, avatarUrl: true } },
+              },
+            },
+          },
+        },
         _count: { select: { likes: true, comments: true } },
       },
     });
   res.json(
-    posts.map(({ likes, _count, createdById, status, updatedAt, ...post }) => ({
+    posts.map(({ likes, comments, _count, createdById, status, updatedAt, ...post }) => ({
       ...post,
       likesCount: _count.likes,
       commentsCount: _count.comments,
       likedByMe: likes.length > 0,
+      previewComments: comments
+        .map((comment) => serializeComment(comment, req.user.id))
+        .reverse(),
     })),
   );
 };
