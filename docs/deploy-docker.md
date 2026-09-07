@@ -45,6 +45,8 @@ O container aplica `prisma migrate deploy` automaticamente antes de iniciar a AP
 
 A imagem da API instala `ffmpeg`. A Luna não envia o MP4 bruto ao modelo: a API extrai até oito quadros distribuídos pelo vídeo para analisar início, meio e fim do exercício. Portanto, não remova a instalação de `ffmpeg` do `backend/Dockerfile`.
 
+O prompt e a base de conhecimento de treino ficam em `/app/backend/knowledge/training`. O volume `triade_fit_ai_knowledge` preserva as alterações feitas pelo painel entre rebuilds da API.
+
 O container `triade-fit-admin` gera o React/Vite em modo producao e o entrega como site estatico. `VITE_API_URL` e incorporada no build; se essa URL mudar, execute `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build admin` novamente. O `--env-file .env.production` tambem e obrigatorio em todos os comandos Compose: `env_file` injeta variaveis no container, mas nao basta para interpolar `${...}` no proprio arquivo Compose.
 
 Na primeira subida de uma base vazia, crie o administrador definido em `ADMIN_EMAIL` e `ADMIN_PASSWORD`:
@@ -78,7 +80,7 @@ Use essa mesma base em `PUBLIC_BASE_URL`, no webhook do Asaas e no `EXPO_PUBLIC_
 
 ## Dados e uploads atuais
 
-Os volumes `triade_fit_postgres` e `triade_fit_uploads` preservam dados entre reinicios e recriacoes normais dos containers. Nao rode `docker compose down -v` em producao.
+Os volumes `triade_fit_postgres`, `triade_fit_uploads` e `triade_fit_ai_knowledge` preservam dados, uploads e o conhecimento da Luna entre reinicios e recriacoes normais dos containers. Nao rode `docker compose down -v` em producao.
 
 O volume de uploads inicia vazio de proposito: fotos e arquivos locais nao sao enviados para a imagem Docker. Se for migrar os dados que ja existem no computador, faca backup do banco e da pasta `backend/uploads` antes. Depois de copiar a pasta para o servidor, com a API em execucao:
 

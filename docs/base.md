@@ -999,6 +999,15 @@ Esta lista é deliberadamente explícita para impedir que limitações sejam con
 - se o erro ocorrer somente em vídeo, confirme `ffmpeg -version` dentro do container ou o `FFMPEG_PATH` no ambiente local;
 - nunca cole a chave em captura, conversa, `mobile/.env` ou variável `EXPO_PUBLIC_*`. Se isso ocorrer, revogue-a e gere outra.
 
+### Conhecimento da Luna de treinos
+
+- o painel edita o prompt padrão e a base de conhecimento em **Configurações do app > Luna Treinos**;
+- a API salva os textos em `backend/knowledge/training/prompt-padrao.md` e `backend/knowledge/training/conhecimentos.md`;
+- cada nova resposta lê os arquivos novamente, portanto a alteração não exige novo APK;
+- regras fixas de segurança são acrescentadas pelo backend e não podem ser removidas pelo conteúdo do painel;
+- no aplicativo, **Ouvir resposta** usa a voz instalada no próprio celular e não envia uma segunda requisição à IA;
+- em produção, o volume `triade_fit_ai_knowledge` preserva os dois arquivos quando o container é recriado.
+
 ### Migration falha
 
 - não apague migration já aplicada para “resolver”;
@@ -1104,7 +1113,7 @@ Antes do primeiro uso real:
 O modo de produção em VPS usa `docker-compose.production.yml`, separado do `docker-compose.yml` local. Ele cria três containers: `triade-fit-api` (Node/Express/Prisma), `triade-fit-postgres` (PostgreSQL 16) e `triade-fit-admin` (React/Vite entregue por Nginx interno). Os bots existentes continuam sob PM2 e não são gerenciados por esse Compose.
 
 - `backend/Dockerfile` instala apenas o workspace do backend, gera o Prisma Client, instala `ffmpeg` e, ao iniciar, executa `prisma migrate deploy`; `seed` nunca é executado automaticamente porque apaga dados demonstrativos e reais.
-- `triade_fit_postgres` e `triade_fit_uploads` são volumes nomeados que preservam banco e arquivos locais entre reinícios. `docker compose down -v` remove esses volumes e não pode ser usado em produção.
+- `triade_fit_postgres`, `triade_fit_uploads` e `triade_fit_ai_knowledge` são volumes nomeados que preservam banco, arquivos locais e o conhecimento editável da Luna entre reinícios. `docker compose down -v` remove esses volumes e não pode ser usado em produção.
 - PostgreSQL não publica porta externa. A API publica apenas `127.0.0.1:${TRIADE_API_PORT}:3333`; Nginx/Caddy no host deve prover HTTPS e encaminhar para essa porta.
 - O admin usa `127.0.0.1:${TRIADE_ADMIN_PORT}:80`; o Nginx do host entrega `https://admin-triade-fit.testes-techcode.shop`. `VITE_API_URL` é pública e é incorporada durante o build estático do painel.
 - O backend continua na porta interna `3333`. Se o host já a utiliza, altere apenas `TRIADE_API_PORT` (por exemplo, `3340`) e ajuste o proxy; a URL pública permanece `https://triade-api.testes-techcode.shop`.

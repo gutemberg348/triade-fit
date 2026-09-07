@@ -30,9 +30,14 @@ import * as Clipboard from "expo-clipboard";
 import { Brand, Button, Screen } from "../components/UI.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import api, { messageFrom } from "../services/api.js";
-import { colors, fonts, radii } from "../theme/index.js";
+import { colors, fonts, isDarkAppTheme, radii } from "../theme/index.js";
 
 const APP_CONFIG_CACHE_KEY = "@triade-fit/app-config";
+const darkLoginTheme = isDarkAppTheme();
+const loginImageOpacity = darkLoginTheme ? 0.88 : 0.96;
+const loginGradient = darkLoginTheme
+  ? ["rgba(5,5,7,.06)", "rgba(5,5,7,.18)", "rgba(5,5,7,.42)", "rgba(5,5,7,.86)", colors.deep]
+  : ["rgba(25,13,10,.08)", "rgba(25,13,10,.18)", "rgba(25,13,10,.38)", "rgba(241,227,214,.9)", colors.deep];
 
 const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
 
@@ -278,11 +283,13 @@ export function LoginScreen({ navigation }) {
       <ImageBackground
         source={remoteLoginImage ? { uri: appConfig.loginImageUrl } : require("../../assets/essenza-cover.png")}
         style={styles.authBg}
-        imageStyle={{ opacity: 0.64 }}
+        imageStyle={{ opacity: loginImageOpacity }}
+        resizeMode="cover"
         onError={() => setLoginImageFailed(true)}
       >
         <LinearGradient
-          colors={["rgba(5,5,7,.08)", "rgba(5,5,7,.68)", colors.deep]}
+          colors={loginGradient}
+          locations={[0, 0.42, 0.62, 0.76, 1]}
           style={styles.authGradient}
         >
           <ScrollView
@@ -294,7 +301,7 @@ export function LoginScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
           >
           <View style={styles.authContent}>
-            <Brand />
+            <Brand onImage />
             <View style={styles.copy}>
               <Text style={styles.eyebrow}>{appConfig?.loginEyebrow || "SUA JORNADA COMEÇA AQUI"}</Text>
               <Text style={styles.title}>{appConfig?.loginHeadline || "Seu corpo pede equilíbrio."}</Text>
@@ -330,11 +337,21 @@ export function LoginScreen({ navigation }) {
               icon={ArrowRight}
             />
             <View style={styles.links}>
-              <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
+              <Pressable
+                style={({ pressed }) => [styles.authLinkButton, pressed && styles.authLinkButtonPressed]}
+                onPress={() => navigation.navigate("ForgotPassword")}
+              >
                 <Text style={styles.link}>Esqueci minha senha</Text>
               </Pressable>
-              <Pressable onPress={() => navigation.navigate("Register")}>
-                <Text style={styles.link}>Criar minha conta</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.authLinkButton,
+                  styles.authLinkButtonAccent,
+                  pressed && styles.authLinkButtonPressed,
+                ]}
+                onPress={() => navigation.navigate("Register")}
+              >
+                <Text style={[styles.link, styles.linkAccent]}>Criar minha conta</Text>
               </Pressable>
             </View>
           </View>
@@ -1218,31 +1235,41 @@ const styles = StyleSheet.create({
   authGradient: { flex: 1 },
   authScroll: { flex: 1 },
   authScrollContent: { flexGrow: 1, justifyContent: "flex-end" },
-  authContent: { padding: 24, paddingTop: 70, paddingBottom: 68, backgroundColor: "rgba(5,5,7,.08)" },
+  authContent: { padding: 24, paddingTop: 70, paddingBottom: 68 },
   registerKeyboard: { flex: 1 },
   copy: { marginTop: 90, marginBottom: 25 },
   eyebrow: {
-    color: colors.copperLight,
+    color: "#F29A84",
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 1.7,
+    textShadowColor: "rgba(20,10,7,.85)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 7,
   },
   title: {
     maxWidth: 340,
     marginTop: 10,
-    color: colors.text,
+    color: "#FFF8F2",
     fontFamily: fonts.displayBold,
-    fontSize: 45,
-    lineHeight: 51,
+    fontSize: 43,
+    lineHeight: 48,
     letterSpacing: 0.1,
+    textShadowColor: "rgba(20,10,7,.88)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 11,
   },
   em: { color: colors.copperLight, fontStyle: "italic" },
   subtitle: {
     maxWidth: 330,
     marginTop: 12,
-    color: colors.muted,
+    color: "rgba(255,248,242,.92)",
+    fontFamily: fonts.medium,
     fontSize: 13,
     lineHeight: 20,
+    textShadowColor: "rgba(20,10,7,.9)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
   field: {
     minHeight: 54,
@@ -1255,18 +1282,33 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.input,
     color: colors.text,
-    backgroundColor: "rgba(28,19,17,.94)",
+    backgroundColor: colors.surface,
   },
-  input: { flex: 1, height: "100%", color: colors.text },
+  input: { flex: 1, height: "100%", color: colors.text, fontFamily: fonts.body, fontSize: 14 },
   links: {
-    minHeight: 46,
-    marginTop: 16,
-    paddingHorizontal: 4,
+    marginTop: 14,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  link: { paddingVertical: 12, color: colors.copperLight, fontSize: 12, fontWeight: "800" },
+  authLinkButton: {
+    flex: 1,
+    minHeight: 46,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  authLinkButtonAccent: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surface2,
+  },
+  authLinkButtonPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
+  link: { color: colors.title, fontFamily: fonts.bold, fontSize: 12, textAlign: "center" },
+  linkAccent: { color: colors.title },
   error: {
     marginBottom: 12,
     padding: 12,

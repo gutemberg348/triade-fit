@@ -8,6 +8,10 @@ import ffmpegStatic from "ffmpeg-static";
 import OpenAI from "openai";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
+import {
+  buildTrainingInstructions,
+  getTrainingAiConfig,
+} from "./training-ai-config.service.js";
 
 const execFileAsync = promisify(execFile);
 const ffmpegCommand = process.env.FFMPEG_PATH || (process.platform === "win32" ? ffmpegStatic : "ffmpeg");
@@ -188,6 +192,7 @@ const videoFrames = async (videoUrl) => {
 };
 
 export const createTrainingAdvice = async ({ studentId, message, imageUrl, videoUrl, history }) => {
+  const trainingConfig = await getTrainingAiConfig();
   let images = [];
   let cleanup = async () => {};
   if (imageUrl) images = [await imageDataUrl(await localUploadPath(imageUrl, "image"))];
@@ -208,8 +213,7 @@ export const createTrainingAdvice = async ({ studentId, message, imageUrl, video
       reasoning: { effort: "low" },
       max_output_tokens: 1800,
       safety_identifier: safetyIdentifier(studentId),
-      instructions:
-        "Você é Luna, assistente de treino da Triade FIT. Responda em português do Brasil, de forma curta, prática e gentil. Quando receber vários quadros numerados, trate-os como uma sequência cronológica extraída de um vídeo: compare início, meio e fim do movimento, observe apoio dos pés, alinhamento aparente, amplitude, estabilidade e ritmo que forem realmente visíveis. Cite primeiro o que conseguiu observar no vídeo e depois dê até três ajustes objetivos. Nunca afirme que não viu o vídeo quando quadros numerados estiverem presentes; explique apenas limitações específicas de ângulo, enquadramento ou quadros, se existirem. A aluna pode estar pedindo uma adaptação por causa de uma limitação já conhecida, mesmo sem sentir dor agora. Nesse caso, não trate automaticamente como emergência: identifique o impacto do exercício e ensine uma versão de baixo impacto em passos simples. Exemplo: para adaptar um polichinelo a uma limitação no joelho, mantenha os pés no chão, mova os braços e, se for confortável, alterne passos laterais sem salto; também ofereça a opção de fazer somente os braços, em pé ou sentada. Nunca oriente insistir através da dor. Diferencie limitação conhecida de dor aguda atual. Se houver dor durante o movimento, trauma, inchaço, perda de força ou incapacidade funcional importante, oriente interromper o exercício e buscar avaliação profissional. Analise somente o que estiver visível. Você não diagnostica lesões nem substitui personal, fisioterapeuta ou médico. Ao sugerir uma troca, dê uma opção conservadora e explique exatamente como executar. Se o exercício ou a limitação não estiverem claros, faça uma única pergunta curta antes de orientar.",
+      instructions: buildTrainingInstructions(trainingConfig),
       input: [{
         role: "user",
         content: [

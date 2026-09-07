@@ -16,9 +16,18 @@ export const nutritionProfileSchema = z.object({
   ageYears: z.number().int().min(18, "A idade mínima para este cálculo é 18 anos.").max(100, "Informe uma idade válida."),
   weightKg: z.number().min(30, "Informe um peso válido.").max(350, "Informe um peso válido."),
   heightCm: z.number().min(120, "Informe a altura em centímetros.").max(230, "Informe uma altura válida."),
-  activityLevel: z.enum(["SEDENTARY", "LIGHT", "MODERATE", "ACTIVE"], {
-    error: "Escolha seu nível de atividade.",
+  dailyRoutine: z.enum(["VERY_SEDENTARY", "LIGHTLY_ACTIVE", "MODERATELY_ACTIVE", "VERY_ACTIVE", "HEAVY_WORK"], {
+    error: "Escolha como é sua rotina diária.",
   }),
+  exerciseFrequency: z.enum(["NONE", "ONE_TWO", "THREE_FOUR", "FIVE_SIX", "DAILY"], {
+    error: "Informe com que frequência você se exercita.",
+  }),
+  exerciseDuration: z.enum(["UP_TO_30", "THIRTY_SIXTY", "SIXTY_NINETY", "OVER_NINETY"]).nullable().optional(),
+  exerciseIntensity: z.enum(["LIGHT", "MODERATE", "INTENSE"]).nullable().optional(),
+}).superRefine((data, context) => {
+  if (data.exerciseFrequency === "NONE") return;
+  if (!data.exerciseDuration) context.addIssue({ code: "custom", path: ["exerciseDuration"], message: "Informe a duração média do treino." });
+  if (!data.exerciseIntensity) context.addIssue({ code: "custom", path: ["exerciseIntensity"], message: "Escolha a intensidade do treino." });
 });
 
 export const trainingAdviceSchema = z.object({

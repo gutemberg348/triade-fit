@@ -2,10 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AppWindow,
   BadgeDollarSign,
+  BookOpenText,
+  BrainCircuit,
   CreditCard,
   ImagePlus,
+  Moon,
+  Palette,
+  RotateCcw,
   Save,
   Smartphone,
+  Sun,
   Upload,
 } from "lucide-react";
 import { ErrorState, Loading, PageHeader } from "../components/UI.jsx";
@@ -19,8 +25,62 @@ const money = new Intl.NumberFormat("pt-BR", {
 const decimalFromCents = (value) => (Number(value || 0) / 100).toFixed(2);
 const centsFromDecimal = (value) => Math.round(Number(value || 0) * 100);
 
+const THEME_PRESETS = {
+  CHAMPAGNE_NUDE: {
+    label: "Champagne Nude",
+    description: "Claro, leve e acolhedor",
+    icon: Sun,
+    colors: {
+      background: "#F1E3D6",
+      cardBackground: "#F8EFE7",
+      secondaryBackground: "#E8D3C2",
+      button: "#C97D74",
+      buttonPressed: "#B96D65",
+      title: "#301F19",
+      text: "#60483D",
+      secondaryText: "#8A6F62",
+      border: "#D9C2B2",
+      activeIcon: "#B96D65",
+      inactiveIcon: "#8A6F62",
+    },
+  },
+  TRIADE_DARK: {
+    label: "Triade Escuro",
+    description: "Tema original preservado",
+    icon: Moon,
+    colors: {
+      background: "#100B0A",
+      cardBackground: "#1C1311",
+      secondaryBackground: "#241815",
+      button: "#E8885B",
+      buttonPressed: "#9E3F22",
+      title: "#FFFFFF",
+      text: "#E3D2C9",
+      secondaryText: "#C9AEA1",
+      border: "#4D352B",
+      activeIcon: "#E8885B",
+      inactiveIcon: "#C9AEA1",
+    },
+  },
+};
+
+const THEME_FIELDS = [
+  ["background", "Fundo principal"],
+  ["cardBackground", "Fundo dos cards"],
+  ["secondaryBackground", "Fundo secundário"],
+  ["button", "Botões e destaques"],
+  ["buttonPressed", "Botão pressionado / destaque forte"],
+  ["title", "Título principal"],
+  ["text", "Texto normal"],
+  ["secondaryText", "Texto secundario"],
+  ["border", "Linhas e bordas"],
+  ["activeIcon", "Ícone ativo"],
+  ["inactiveIcon", "Ícone inativo"],
+];
+
 export default function Settings() {
   const resource = useApi("/admin/app-config");
+  const trainingResource = useApi("/admin/training-ai-config");
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState("");
@@ -28,13 +88,21 @@ export default function Settings() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!resource.data) return;
+    if (!resource.data || !trainingResource.data) return;
+    const preset = resource.data.themePreset || "CHAMPAGNE_NUDE";
     setForm({
       ...resource.data,
+      themePreset: preset,
+      themeColors: {
+        ...THEME_PRESETS[preset]?.colors,
+        ...resource.data.themeColors,
+      },
+      trainingAiPrompt: trainingResource.data.prompt,
+      trainingAiKnowledge: trainingResource.data.knowledge,
       pixPrice: decimalFromCents(resource.data.pixPriceCents),
       cardBasePrice: decimalFromCents(resource.data.cardBasePriceCents),
     });
-  }, [resource.data]);
+  }, [resource.data, trainingResource.data]);
 
   const preview = useMemo(() => {
     if (!form) return null;
@@ -58,6 +126,19 @@ export default function Settings() {
   }, [form]);
 
   const change = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+  const selectTheme = (themePreset) =>
+    setForm((current) => ({
+      ...current,
+      themePreset,
+      themeColors: { ...THEME_PRESETS[themePreset].colors },
+    }));
+
+  const changeThemeColor = (field, value) =>
+    setForm((current) => ({
+      ...current,
+      themeColors: { ...current.themeColors, [field]: value.toUpperCase() },
+    }));
 
   const upload = async (file, field) => {
     if (!file) return;
@@ -83,17 +164,34 @@ export default function Settings() {
     setError("");
     setMessage("");
     try {
-      const { plan: _plan, pixPrice, cardBasePrice, createdAt: _createdAt, updatedAt: _updatedAt, id: _id, ...data } = form;
-      const response = await api.put("/admin/app-config", {
-        ...data,
-        pixPriceCents: centsFromDecimal(pixPrice),
-        cardBasePriceCents: centsFromDecimal(cardBasePrice),
-        planDurationMonths: Number(data.planDurationMonths),
-        cardInstallments: Number(data.cardInstallments),
-        cardInterestPercent: Number(data.cardInterestPercent),
-      });
+      const {
+        plan: _plan,
+        pixPrice,
+        cardBasePrice,
+        trainingAiPrompt,
+        trainingAiKnowledge,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        id: _id,
+        ...data
+      } = form;
+      const [response, trainingResponse] = await Promise.all([
+        api.put("/admin/app-config", {
+          ...data,
+          pixPriceCents: centsFromDecimal(pixPrice),
+          cardBasePriceCents: centsFromDecimal(cardBasePrice),
+          planDurationMonths: Number(data.planDurationMonths),
+          cardInstallments: Number(data.cardInstallments),
+          cardInterestPercent: Number(data.cardInterestPercent),
+        }),
+        api.put("/admin/training-ai-config", {
+          prompt: trainingAiPrompt,
+          knowledge: trainingAiKnowledge,
+        }),
+      ]);
       resource.setData(response.data);
-      setMessage("Configurações publicadas no aplicativo.");
+      trainingResource.setData(trainingResponse.data);
+      setMessage("Configurações e conhecimento da Luna publicados.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -101,8 +199,10 @@ export default function Settings() {
     }
   };
 
-  if (resource.error) return <ErrorState message={resource.error} retry={resource.reload} />;
-  if (resource.loading || !form) return <Loading label="Carregando configurações..." />;
+  if (resource.error || trainingResource.error)
+    return <ErrorState message={resource.error || trainingResource.error} retry={() => { resource.reload(); trainingResource.reload(); }} />;
+  if (resource.loading || trainingResource.loading || !form)
+    return <Loading label="Carregando configurações..." />;
 
   return (
     <form onSubmit={submit}>
@@ -129,6 +229,61 @@ export default function Settings() {
               <Field label="Título principal do login" value={form.loginHeadline} onChange={(value) => change("loginHeadline", value)} full />
               <Field label="Descrição do login" value={form.loginSubtitle} onChange={(value) => change("loginSubtitle", value)} full />
               <Field label="Texto sobre o banner inicial" value={form.homeBannerLabel} onChange={(value) => change("homeBannerLabel", value)} full />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection icon={Palette} eyebrow="APARÊNCIA" title="Tema e cores do aplicativo">
+            <p className="settings-theme-intro">Escolha uma base e visualize o resultado antes de publicar. O tema escuro original permanece salvo como opção de reserva.</p>
+            <div className="settings-theme-presets">
+              {Object.entries(THEME_PRESETS).map(([key, preset]) => {
+                const Icon = preset.icon;
+                const selected = form.themePreset === key;
+                return (
+                  <button key={key} type="button" className={`settings-theme-preset${selected ? " is-selected" : ""}`} onClick={() => selectTheme(key)}>
+                    <span className="settings-theme-preset__icon" style={{ background: preset.colors.background, color: preset.colors.activeIcon, borderColor: preset.colors.border }}><Icon /></span>
+                    <span><strong>{preset.label}</strong><small>{preset.description}</small></span>
+                    <span className="settings-theme-swatches">
+                      {[preset.colors.background, preset.colors.cardBackground, preset.colors.button, preset.colors.title].map((color) => <i key={color} style={{ background: color }} />)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="settings-theme-editor">
+              <div className="settings-color-grid">
+                {THEME_FIELDS.map(([field, label]) => (
+                  <ColorField key={field} label={label} value={form.themeColors[field]} onChange={(value) => changeThemeColor(field, value)} />
+                ))}
+                <button type="button" className="settings-theme-reset" onClick={() => selectTheme(form.themePreset)}><RotateCcw /> Restaurar cores de {THEME_PRESETS[form.themePreset].label}</button>
+              </div>
+              <ThemePreview colors={form.themeColors} />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection icon={BrainCircuit} eyebrow="LUNA TREINOS" title="Prompt e conhecimento da assistente">
+            <p className="settings-theme-intro">Tudo o que for salvo aqui passa a ser usado nas próximas respostas da Luna, sem precisar gerar outro APK.</p>
+            <div className="settings-ai-grid">
+              <TextAreaField
+                label="Prompt padrão"
+                hint="Defina o jeito de responder, o tom e a forma de explicar. As regras essenciais de segurança continuam protegidas no sistema."
+                value={form.trainingAiPrompt}
+                onChange={(value) => change("trainingAiPrompt", value)}
+                maxLength={12000}
+              />
+              <TextAreaField
+                label="Conhecimentos de treino"
+                hint="Cadastre exercícios, execução, correções, limitações e substituições. O conteúdo é salvo em conhecimentos.md."
+                value={form.trainingAiKnowledge}
+                onChange={(value) => change("trainingAiKnowledge", value)}
+                maxLength={100000}
+                icon={BookOpenText}
+                large
+              />
+            </div>
+            <div className="settings-ai-actions">
+              <span>Arquivos: prompt-padrao.md e conhecimentos.md</span>
+              <button type="submit" className="button primary" disabled={saving || Boolean(uploading)}><Save /> {saving ? "Salvando..." : "Salvar conhecimento"}</button>
             </div>
           </SettingsSection>
 
@@ -192,6 +347,61 @@ function Field({ label, value, onChange, full }) {
 
 function NumberField({ label, value, onChange, ...props }) {
   return <label><span>{label}</span><input type="number" value={value} onChange={(event) => onChange(event.target.value)} required {...props} /></label>;
+}
+
+function TextAreaField({ label, hint, value, onChange, maxLength, icon: Icon, large }) {
+  return (
+    <label className={`settings-ai-field${large ? " settings-ai-field--large" : ""}`}>
+      <span>{Icon ? <Icon /> : null}{label}</span>
+      <small>{hint}</small>
+      <textarea value={value || ""} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required />
+      <em>{String(value || "").length.toLocaleString("pt-BR")} / {maxLength.toLocaleString("pt-BR")} caracteres</em>
+    </label>
+  );
+}
+
+function ColorField({ label, value, onChange }) {
+  const pickerValue = /^#[0-9A-F]{6}$/i.test(value || "") ? value : "#000000";
+  return (
+    <label className="settings-color-field">
+      <span>{label}</span>
+      <div>
+        <input type="color" value={pickerValue} onChange={(event) => onChange(event.target.value)} />
+        <input type="text" value={value} pattern="#[0-9A-Fa-f]{6}" maxLength="7" onChange={(event) => onChange(event.target.value)} required />
+      </div>
+    </label>
+  );
+}
+
+function ThemePreview({ colors }) {
+  const previewStyle = {
+    "--theme-bg": colors.background,
+    "--theme-card": colors.cardBackground,
+    "--theme-secondary": colors.secondaryBackground,
+    "--theme-button": colors.button,
+    "--theme-button-pressed": colors.buttonPressed,
+    "--theme-title": colors.title,
+    "--theme-text": colors.text,
+    "--theme-muted": colors.secondaryText,
+    "--theme-border": colors.border,
+    "--theme-active": colors.activeIcon,
+    "--theme-inactive": colors.inactiveIcon,
+  };
+  return (
+    <div className="settings-theme-preview" style={previewStyle}>
+      <div className="settings-theme-preview__status"><span>9:41</span><span>● ● ●</span></div>
+      <small>SUA JORNADA</small>
+      <h4>Olá, Guto</h4>
+      <p>Movimento e constância no seu ritmo.</p>
+      <article>
+        <span>MÓDULO EM DESTAQUE</span>
+        <h5>Comece por aqui</h5>
+        <p>3 aulas para dar o primeiro passo.</p>
+        <button type="button">Continuar aula</button>
+      </article>
+      <div className="settings-theme-preview__nav"><b>Início</b><span>Treinos</span><span>Evolução</span><span>Perfil</span></div>
+    </div>
+  );
 }
 
 function ImageField({ title, hint, field, value, uploading, upload, change }) {

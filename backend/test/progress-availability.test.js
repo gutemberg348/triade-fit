@@ -66,6 +66,7 @@ test("módulo seguinte exige a conclusão completa do anterior", () => {
   const result = withContentModulesAvailability(contentModules(null));
   assert.equal(result[0].availability.isLocked, false);
   assert.equal(result[1].availability.isLocked, true);
+  assert.equal(result[1].photoAvailability.isLocked, true);
   assert.match(result[1].availability.reason, /Base/);
 });
 
@@ -77,6 +78,7 @@ test("módulo respeita a quantidade de dias configurada pelo admin", () => {
   );
   assert.equal(waiting[1].availability.isLocked, true);
   assert.equal(waiting[1].availability.unlocksAt, "2026-08-27T10:00:00.000Z");
+  assert.equal(waiting[1].photoAvailability.isLocked, false);
 
   const released = withContentModulesAvailability(
     contentModules({ completed: true, completedAt }),

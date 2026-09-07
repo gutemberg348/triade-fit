@@ -83,23 +83,23 @@ enum PhotoPose {
 }
 
 model User {
-  id                    String               @id @default(uuid()) @db.Uuid
-  email                 String               @unique
+  id                    String                 @id @default(uuid()) @db.Uuid
+  email                 String                 @unique
   passwordHash          String
-  role                  Role                 @default(STUDENT)
-  status                AccountStatus        @default(ACTIVE)
+  role                  Role                   @default(STUDENT)
+  status                AccountStatus          @default(ACTIVE)
   name                  String
   phone                 String?
-  birthDate             DateTime?            @db.Date
+  birthDate             DateTime?              @db.Date
   avatarUrl             String?
   lastLoginAt           DateTime?
   passwordChangedAt     DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
   studentProfile        StudentProfile?
-  recordedMeasurements  BodyMeasurement[]    @relation("MeasurementAuthor")
-  createdAnnouncements  Announcement[]       @relation("AnnouncementAuthor")
-  createdCommunityPosts CommunityPost[]      @relation("CommunityPostAuthor")
+  recordedMeasurements  BodyMeasurement[]      @relation("MeasurementAuthor")
+  createdAnnouncements  Announcement[]         @relation("AnnouncementAuthor")
+  createdCommunityPosts CommunityPost[]        @relation("CommunityPostAuthor")
   communityPostLikes    CommunityPostLike[]
   communityPostComments CommunityPostComment[]
   refreshTokens         RefreshToken[]
@@ -142,17 +142,17 @@ model CalorieEntry {
   studentId          String         @db.Uuid
   photoUrl           String
   imageHash          String?
-  foodName            String
+  foodName           String
   portionDescription String?
-  calories            Int
-  proteinGrams        Decimal?       @db.Decimal(7, 1)
-  carbohydrateGrams   Decimal?       @db.Decimal(7, 1)
-  fatGrams            Decimal?       @db.Decimal(7, 1)
-  confidence           String?
-  analysis             String?
-  consumedAt           DateTime       @default(now())
-  createdAt            DateTime       @default(now())
-  student              StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  calories           Int
+  proteinGrams       Decimal?       @db.Decimal(7, 1)
+  carbohydrateGrams  Decimal?       @db.Decimal(7, 1)
+  fatGrams           Decimal?       @db.Decimal(7, 1)
+  confidence         String?
+  analysis           String?
+  consumedAt         DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+  student            StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId, consumedAt(sort: Desc)])
   @@index([studentId, imageHash])
@@ -162,15 +162,19 @@ model NutritionProfile {
   id                 String         @id @default(uuid()) @db.Uuid
   studentId          String         @unique @db.Uuid
   biologicalSex      String
-  ageYears            Int
-  weightKg            Decimal        @db.Decimal(6, 2)
-  heightCm            Decimal        @db.Decimal(5, 2)
-  activityLevel       String
-  basalCalories       Int
-  dailyCalorieTarget  Int
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  student             StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  ageYears           Int
+  weightKg           Decimal        @db.Decimal(6, 2)
+  heightCm           Decimal        @db.Decimal(5, 2)
+  activityLevel      String
+  dailyRoutine       String         @default("LIGHTLY_ACTIVE")
+  exerciseFrequency  String         @default("ONE_TWO")
+  exerciseDuration   String?
+  exerciseIntensity  String?
+  basalCalories      Int
+  dailyCalorieTarget Int
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  student            StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 model TrainingAiMessage {
@@ -212,6 +216,8 @@ model PaymentOrder {
 model AppConfig {
   id                  String   @id @default("app")
   appName             String   @default("Triade FIT")
+  themePreset         String   @default("CHAMPAGNE_NUDE")
+  themeColors         Json?
   loginImageUrl       String?
   loginEyebrow        String   @default("SUA JORNADA COMEÇA AQUI")
   loginHeadline       String   @default("Seu corpo pede equilíbrio.")
@@ -305,17 +311,17 @@ model Program {
 }
 
 model Module {
-  id              String        @id @default(uuid()) @db.Uuid
-  programId       String        @db.Uuid
+  id              String          @id @default(uuid()) @db.Uuid
+  programId       String          @db.Uuid
   title           String
   description     String?
   coverUrl        String?
-  unlockDelayDays Int           @default(0)
-  sortOrder       Int           @default(0)
-  status          PublishStatus @default(DRAFT)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  program         Program       @relation(fields: [programId], references: [id], onDelete: Cascade)
+  unlockDelayDays Int             @default(0)
+  sortOrder       Int             @default(0)
+  status          PublishStatus   @default(DRAFT)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  program         Program         @relation(fields: [programId], references: [id], onDelete: Cascade)
   lessons         Lesson[]
   progressPhotos  ProgressPhoto[]
 
@@ -353,17 +359,17 @@ model Lesson {
 }
 
 model CommunityPost {
-  id              String              @id @default(uuid()) @db.Uuid
-  createdById     String              @db.Uuid
+  id              String                 @id @default(uuid()) @db.Uuid
+  createdById     String                 @db.Uuid
   authorName      String
   authorAvatarUrl String?
   message         String
   imageUrl        String?
-  status          PublishStatus       @default(DRAFT)
+  status          PublishStatus          @default(DRAFT)
   publishedAt     DateTime?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  createdBy       User                @relation("CommunityPostAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  createdBy       User                   @relation("CommunityPostAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   likes           CommunityPostLike[]
   comments        CommunityPostComment[]
 

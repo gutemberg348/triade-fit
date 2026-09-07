@@ -106,6 +106,7 @@ const latestModulePhotos = (photos, moduleId) => {
   const byPose = new Map();
   photos
     .filter((photo) => photo.moduleId === moduleId)
+    .sort((first, second) => new Date(first.createdAt) - new Date(second.createdAt))
     .forEach((photo) => {
       if (!byPose.has(photo.pose)) byPose.set(photo.pose, photo);
     });
@@ -117,7 +118,7 @@ const latestModulePhotos = (photos, moduleId) => {
 
 function ModulePhotoJourney({ modules = [], photos = [], onAdd }) {
   const availableModules = modules.flatMap((module, index) => (
-    module.availability?.isLocked ? [] : [{ module, index }]
+    (module.photoAvailability || module.availability)?.isLocked ? [] : [{ module, index }]
   ));
   if (!availableModules.length) return null;
   return (
@@ -127,7 +128,7 @@ function ModulePhotoJourney({ modules = [], photos = [], onAdd }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.sectionEyebrow}>REGISTRO VISUAL</Text>
           <Text style={styles.sectionTitle}>Sua evolução por módulo</Text>
-          <Text style={styles.sectionSubtitle}>Uma etapa visual para cada módulo liberado</Text>
+          <Text style={styles.sectionSubtitle}>O registro inicial de cada módulo fica preservado</Text>
         </View>
       </View>
       <ScrollView
@@ -164,13 +165,13 @@ function ModulePhotoJourney({ modules = [], photos = [], onAdd }) {
                   </View>
                   <View style={styles.modulePhotoRegistered}>
                     <Text style={styles.modulePhotoDate}>Registrado em {formatDate(modulePhotos[0].takenAt, { day: "2-digit", month: "long", year: "numeric" })}</Text>
-                    <Pressable style={styles.modulePhotoSmallAction} onPress={() => onAdd(module, index)}><ImagePlus size={15} color={colors.primaryLight} /><Text style={styles.modulePhotoSmallActionText}>Atualizar</Text></Pressable>
+                    <View style={styles.modulePhotoPreserved}><Check size={14} color={colors.success} /><Text style={styles.modulePhotoPreservedText}>Início preservado</Text></View>
                   </View>
                 </>
               ) : (
                 <Pressable style={styles.modulePhotoAvailable} onPress={() => onAdd(module, index)}>
                   <View style={styles.modulePhotoAvailableIcon}><Camera size={24} color={colors.ink} /></View>
-                  <View style={{ flex: 1 }}><Text style={styles.modulePhotoAvailableTitle}>Registrar esta etapa</Text><Text style={styles.modulePhotoAvailableText}>Adicione somente as posições que desejar.</Text></View>
+                  <View style={{ flex: 1 }}><Text style={styles.modulePhotoAvailableTitle}>Fotos de abertura</Text><Text style={styles.modulePhotoAvailableText}>Registre o início deste módulo.</Text></View>
                   <ChevronRight size={19} color={colors.primaryLight} />
                 </Pressable>
               )}
@@ -506,12 +507,13 @@ export function AddMeasurementScreen({ navigation, route }) {
   const detailGroups = additionalMeasurementGroups;
   useFocusEffect(useCallback(() => {
     let active = true;
-    api.get("/home-content").then(({ data }) => {
+    Promise.all([api.get("/home-content"), api.get("/progress-photos")]).then(([home, photos]) => {
       if (!active) return;
-      const available = (data.modules || []).flatMap((module, index) => (
-        module.availability?.isLocked ? [] : [{ ...module, moduleNumber: index + 1 }]
+      const available = (home.data.modules || []).flatMap((module, index) => (
+        (module.photoAvailability || module.availability)?.isLocked ? [] : [{ ...module, moduleNumber: index + 1 }]
       ));
-      setPhotoModule(available[available.length - 1] || null);
+      const photographedModules = new Set(photos.data.map((photo) => photo.moduleId));
+      setPhotoModule(available.find((module) => !photographedModules.has(module.id)) || null);
     }).catch(() => {
       if (active) setPhotoModule(null);
     });
@@ -602,7 +604,7 @@ export function AddMeasurementScreen({ navigation, route }) {
           })}
         >
           <View style={styles.measurePhotoShortcutIcon}><Camera size={20} color={colors.text} /></View>
-          <View style={{ flex: 1 }}><Text style={styles.measurePhotoShortcutEyebrow}>REGISTRO VISUAL</Text><Text style={styles.measurePhotoShortcutTitle}>Adicionar ou atualizar fotos</Text><Text style={styles.measurePhotoShortcutText}>Módulo {String(photoModule.moduleNumber).padStart(2, "0")} · {photoModule.title}</Text></View>
+          <View style={{ flex: 1 }}><Text style={styles.measurePhotoShortcutEyebrow}>REGISTRO VISUAL DE ABERTURA</Text><Text style={styles.measurePhotoShortcutTitle}>Registrar fotos do módulo</Text><Text style={styles.measurePhotoShortcutText}>Módulo {String(photoModule.moduleNumber).padStart(2, "0")} · {photoModule.title}</Text></View>
           <ChevronRight size={19} color={colors.primaryLight} />
         </Pressable>
       ) : null}
@@ -642,7 +644,7 @@ export function AddPhotoScreen({ navigation, route }) {
   };
   const submit = async () => {
     const selected = Object.entries(assets).filter(([, asset]) => asset);
-    if (!selected.length) return setError("Adicione pelo menos uma foto: frente, lado ou costas.");
+    if (!selected.length) return setError("Adicione pelo menos uma foto inicial: frente, lado ou costas.");
     setSaving(true);
     setError("");
     try {
@@ -662,13 +664,13 @@ export function AddPhotoScreen({ navigation, route }) {
     }
   };
   return (
-    <Screen header={moduleNumber ? `Fotos do módulo ${moduleNumber}` : "Novo registro visual"} onBack={navigation.goBack}>
+    <Screen header={moduleNumber ? `Abertura do módulo ${moduleNumber}` : "Novo registro visual"} onBack={navigation.goBack}>
       <View style={styles.photoFormHero}>
         <View style={styles.photoFormHeroIcon}><Camera color={colors.accent} size={22} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.photoFormEyebrow}>{moduleNumber ? `REGISTRO DO MÓDULO ${String(moduleNumber).padStart(2, "0")}` : "REGISTRO DA JORNADA"}</Text>
+          <Text style={styles.photoFormEyebrow}>{moduleNumber ? `INÍCIO DO MÓDULO ${String(moduleNumber).padStart(2, "0")}` : "REGISTRO DA JORNADA"}</Text>
           <Text style={styles.photoFormHeroTitle}>{moduleTitle}</Text>
-          <Text style={styles.photoFormLead}>Registre esta etapa em frente, lado ou costas. Use luz, distância e posição parecidas nos próximos módulos.</Text>
+          <Text style={styles.photoFormLead}>Estas fotos serão o ponto inicial deste módulo. Use luz, distância e posição parecidas nos próximos registros.</Text>
         </View>
         <View style={styles.photoCount}><Text style={styles.photoCountValue}>{selectedCount}/3</Text><Text style={styles.photoCountLabel}>PRONTAS</Text></View>
       </View>
@@ -699,7 +701,7 @@ export function AddPhotoScreen({ navigation, route }) {
       </View>
       <View style={styles.notesCard}><Text style={styles.measureGroupTitle}>Observação</Text><TextInput style={styles.notesInput} multiline textAlignVertical="top" value={notes} onChangeText={setNotes} placeholder="Ex.: como você se sente nesta etapa..." placeholderTextColor={colors.subtle} /></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button title={saving ? "Enviando fotos..." : `Salvar registro${selectedCount ? ` (${selectedCount})` : ""}`} icon={Camera} onPress={submit} disabled={saving} />
+      <Button title={saving ? "Enviando fotos..." : `Salvar fotos iniciais${selectedCount ? ` (${selectedCount})` : ""}`} icon={Camera} onPress={submit} disabled={saving} />
     </Screen>
   );
 }
@@ -734,8 +736,8 @@ const styles = StyleSheet.create({
   modulePhotoPose: { position: "absolute", left: 5, bottom: 5, paddingVertical: 3, paddingHorizontal: 6, overflow: "hidden", borderRadius: 7, color: colors.text, backgroundColor: "rgba(9,6,5,.78)", fontFamily: fonts.bold, fontSize: 7 },
   modulePhotoRegistered: { marginTop: 11, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   modulePhotoDate: { flex: 1, color: colors.muted, fontSize: 8, textTransform: "capitalize" },
-  modulePhotoSmallAction: { minHeight: 34, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderWidth: 1, borderColor: "rgba(245,179,141,.3)", borderRadius: 11, backgroundColor: "rgba(245,179,141,.08)" },
-  modulePhotoSmallActionText: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 9 },
+  modulePhotoPreserved: { minHeight: 32, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 11, backgroundColor: "rgba(169,196,154,.1)" },
+  modulePhotoPreservedText: { color: colors.success, fontFamily: fonts.bold, fontSize: 8 },
   modulePhotoAvailable: { minHeight: 91, marginTop: 13, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(245,179,141,.5)", borderRadius: 16, backgroundColor: "rgba(245,179,141,.07)" },
   modulePhotoAvailableIcon: { width: 41, height: 41, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: colors.primaryLight },
   modulePhotoAvailableTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 14, lineHeight: 18 },

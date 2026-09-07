@@ -10,17 +10,17 @@ import { ArrowLeft, Check, Leaf, Play } from "lucide-react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fonts, radii } from "../theme/index.js";
 
-export function Brand({ mini = false }) {
+export function Brand({ mini = false, onImage = false }) {
   return (
     <View style={styles.brand}>
-      <View style={[styles.mark, mini && styles.markMini]}>
+      <View style={[styles.mark, onImage && styles.markOnImage, mini && styles.markMini]}>
         <Leaf size={mini ? 18 : 22} color={colors.ink} strokeWidth={2.6} />
       </View>
       <View>
-        <Text style={[styles.brandName, mini && styles.brandNameMini]}>
+        <Text style={[styles.brandName, onImage && styles.brandNameOnImage, mini && styles.brandNameMini]}>
           TRIADE FIT
         </Text>
-        {!mini && <Text style={styles.brandSmall}>PERSONAL TRAINING</Text>}
+        {!mini && <Text style={[styles.brandSmall, onImage && styles.brandSmallOnImage]}>PERSONAL TRAINING</Text>}
       </View>
     </View>
   );
@@ -86,6 +86,7 @@ export function Button({
         styles[`button_${variant}`],
         style,
         pressed && !disabled && styles.buttonPressed,
+        pressed && !disabled && primary && styles.buttonPrimaryPressed,
         disabled && styles.buttonDisabled,
       ]}
     >
@@ -176,10 +177,27 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: colors.accent,
   },
+  markOnImage: {
+    backgroundColor: "rgba(222,132,116,.94)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.18)",
+  },
   markMini: { width: 38, height: 38, borderRadius: 13 },
   brandName: { color: colors.text, fontFamily: fonts.displayBold, fontSize: 18, letterSpacing: 2.1 },
+  brandNameOnImage: {
+    color: "#FFF8F2",
+    textShadowColor: "rgba(20,10,7,.72)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
   brandNameMini: { fontSize: 14, letterSpacing: 1.7 },
   brandSmall: { marginTop: 1, color: colors.subtle, fontSize: 7, fontWeight: "800", letterSpacing: 1.7 },
+  brandSmallOnImage: {
+    color: "rgba(255,248,242,.78)",
+    textShadowColor: "rgba(20,10,7,.75)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
   screenHeader: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   backButton: {
     width: 40,
@@ -201,12 +219,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 9,
   },
-  button_primary: { backgroundColor: colors.primaryLight },
+  button_primary: { backgroundColor: colors.button },
   button_secondary: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface2 },
   button_ghost: { backgroundColor: "transparent" },
-  buttonPressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
+  buttonPressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
+  buttonPrimaryPressed: { backgroundColor: colors.buttonPressed },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: colors.ink, fontWeight: "900", fontSize: 13 },
+  buttonText: { color: colors.ink, fontFamily: fonts.extraBold, fontSize: 13 },
   buttonTextSecondary: { color: colors.text },
   track: { height: 8, overflow: "hidden", borderRadius: 20, backgroundColor: colors.surface3 },
   fill: { height: "100%", borderRadius: 20 },

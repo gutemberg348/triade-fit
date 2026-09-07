@@ -17,6 +17,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import * as Speech from "expo-speech";
 import {
   Bot,
   Calculator,
@@ -30,8 +31,10 @@ import {
   PencilLine,
   Send,
   Sparkles,
+  Square,
   Trash2,
   Video,
+  Volume2,
   X,
 } from "lucide-react-native";
 import api, { messageFrom } from "../services/api.js";
@@ -43,11 +46,33 @@ const today = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 };
 
-const activityOptions = [
-  { key: "SEDENTARY", label: "Sedentária", hint: "Pouco exercício" },
-  { key: "LIGHT", label: "Leve", hint: "1 a 3 vezes/semana" },
-  { key: "MODERATE", label: "Moderada", hint: "3 a 5 vezes/semana" },
-  { key: "ACTIVE", label: "Ativa", hint: "6 ou mais vezes/semana" },
+const routineOptions = [
+  { key: "VERY_SEDENTARY", label: "Muito sedentária", hint: "Quase sempre sentada" },
+  { key: "LIGHTLY_ACTIVE", label: "Pouco ativa", hint: "Sentada, com alguns deslocamentos" },
+  { key: "MODERATELY_ACTIVE", label: "Moderadamente ativa", hint: "Bastante tempo em pé e andando" },
+  { key: "VERY_ACTIVE", label: "Muito ativa", hint: "Movimenta-se durante grande parte do dia" },
+  { key: "HEAVY_WORK", label: "Trabalho pesado", hint: "Esforço físico frequente no trabalho" },
+];
+
+const exerciseFrequencyOptions = [
+  { key: "NONE", label: "Não pratico" },
+  { key: "ONE_TWO", label: "1–2x por semana" },
+  { key: "THREE_FOUR", label: "3–4x por semana" },
+  { key: "FIVE_SIX", label: "5–6x por semana" },
+  { key: "DAILY", label: "Todos os dias" },
+];
+
+const exerciseDurationOptions = [
+  { key: "UP_TO_30", label: "Até 30 min" },
+  { key: "THIRTY_SIXTY", label: "30–60 min" },
+  { key: "SIXTY_NINETY", label: "60–90 min" },
+  { key: "OVER_NINETY", label: "Mais de 90 min" },
+];
+
+const exerciseIntensityOptions = [
+  { key: "LIGHT", label: "Leve" },
+  { key: "MODERATE", label: "Moderada" },
+  { key: "INTENSE", label: "Intensa" },
 ];
 
 const calorieStatus = (consumed, target) => {
@@ -187,6 +212,26 @@ function TypingIndicator() {
 
 function MetabolismForm({ form, onChange, onSave, onCancel, saving, error, canCancel, inModal = false }) {
   const numberChange = (key, value) => onChange(key, value.replace(",", ".").replace(/[^0-9.]/g, ""));
+  const optionGroup = (options, field, compact = false) => (
+    <View style={[styles.questionOptions, compact && styles.questionOptionsCompact]}>
+      {options.map((option) => {
+        const selected = form[field] === option.key;
+        return (
+          <Pressable
+            key={option.key}
+            onPress={() => onChange(field, option.key)}
+            style={[styles.questionOption, compact && styles.questionOptionCompact, selected && styles.choiceActive]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.questionOptionTitle, selected && styles.choiceTextActive]}>{option.label}</Text>
+              {option.hint ? <Text style={[styles.questionOptionHint, selected && styles.activityHintActive]}>{option.hint}</Text> : null}
+            </View>
+            {selected ? <CheckCircle2 size={16} color={colors.ink} /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
   return (
     <View style={[styles.metabolismCard, inModal && styles.metabolismCardModal]}>
       {inModal ? (
@@ -226,18 +271,34 @@ function MetabolismForm({ form, onChange, onSave, onCancel, saving, error, canCa
         ))}
       </View>
 
-      <Text style={styles.formLabel}>NÍVEL DE ATIVIDADE</Text>
-      <View style={styles.activityGrid}>
-        {activityOptions.map((option) => {
-          const selected = form.activityLevel === option.key;
-          return (
-            <Pressable key={option.key} onPress={() => onChange("activityLevel", option.key)} style={[styles.activityOption, selected && styles.choiceActive]}>
-              <Text style={[styles.activityTitle, selected && styles.choiceTextActive]}>{option.label}</Text>
-              <Text style={[styles.activityHint, selected && styles.activityHintActive]}>{option.hint}</Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.questionBlock}>
+        <Text style={styles.questionStep}>1 · ATIVIDADE DIÁRIA / TRABALHO</Text>
+        <Text style={styles.questionTitle}>Como é sua rotina na maior parte do dia?</Text>
+        {optionGroup(routineOptions, "dailyRoutine")}
       </View>
+
+      {form.dailyRoutine ? (
+        <View style={styles.questionBlock}>
+          <Text style={styles.questionStep}>2 · EXERCÍCIO FÍSICO</Text>
+          <Text style={styles.questionTitle}>Você pratica exercício?</Text>
+          {optionGroup(exerciseFrequencyOptions, "exerciseFrequency", true)}
+        </View>
+      ) : null}
+
+      {form.exerciseFrequency && form.exerciseFrequency !== "NONE" ? (
+        <>
+          <View style={styles.questionBlock}>
+            <Text style={styles.questionStep}>3 · DURAÇÃO</Text>
+            <Text style={styles.questionTitle}>Qual é a duração média do treino?</Text>
+            {optionGroup(exerciseDurationOptions, "exerciseDuration", true)}
+          </View>
+          <View style={styles.questionBlock}>
+            <Text style={styles.questionStep}>4 · INTENSIDADE</Text>
+            <Text style={styles.questionTitle}>Como costuma ser a intensidade?</Text>
+            {optionGroup(exerciseIntensityOptions, "exerciseIntensity", true)}
+          </View>
+        </>
+      ) : null}
       {error ? <Text style={styles.actionError}>{error}</Text> : null}
       <View style={styles.metabolismActions}>
         {canCancel ? <Pressable style={styles.metabolismCancel} onPress={onCancel}><Text style={styles.metabolismCancelText}>Cancelar</Text></Pressable> : null}
@@ -265,7 +326,10 @@ export function CaloriesScreen() {
     ageYears: "",
     weightKg: "",
     heightCm: "",
-    activityLevel: "LIGHT",
+    dailyRoutine: "",
+    exerciseFrequency: "",
+    exerciseDuration: "",
+    exerciseIntensity: "",
   });
 
   const load = useCallback(async () => {
@@ -280,7 +344,10 @@ export function CaloriesScreen() {
         ageYears: source.ageYears == null ? "" : String(source.ageYears),
         weightKg: source.weightKg == null ? "" : String(source.weightKg),
         heightCm: source.heightCm == null ? "" : String(source.heightCm),
-        activityLevel: data.nutritionProfile?.activityLevel || "LIGHT",
+        dailyRoutine: data.nutritionProfile?.dailyRoutine || "",
+        exerciseFrequency: data.nutritionProfile?.exerciseFrequency || "",
+        exerciseDuration: data.nutritionProfile?.exerciseDuration || "",
+        exerciseIntensity: data.nutritionProfile?.exerciseIntensity || "",
       });
     } catch (error) {
       setState({ loading: false, error: messageFrom(error), data: null });
@@ -289,7 +356,12 @@ export function CaloriesScreen() {
   useFocusEffect(useCallback(() => void load(), [load]));
 
   const updateMetabolism = (key, value) => {
-    setMetabolismForm((current) => ({ ...current, [key]: value }));
+    setMetabolismForm((current) => {
+      if (key === "exerciseFrequency" && value === "NONE") {
+        return { ...current, exerciseFrequency: value, exerciseDuration: "", exerciseIntensity: "" };
+      }
+      return { ...current, [key]: value };
+    });
     setMetabolismError("");
   };
 
@@ -299,10 +371,19 @@ export function CaloriesScreen() {
       ageYears: Number(metabolismForm.ageYears),
       weightKg: Number(metabolismForm.weightKg),
       heightCm: Number(metabolismForm.heightCm),
-      activityLevel: metabolismForm.activityLevel,
+      dailyRoutine: metabolismForm.dailyRoutine,
+      exerciseFrequency: metabolismForm.exerciseFrequency,
+      exerciseDuration: metabolismForm.exerciseFrequency === "NONE" ? null : metabolismForm.exerciseDuration || null,
+      exerciseIntensity: metabolismForm.exerciseFrequency === "NONE" ? null : metabolismForm.exerciseIntensity || null,
     };
     if (!payload.biologicalSex || !metabolismForm.ageYears || !metabolismForm.weightKg || !metabolismForm.heightCm) {
       return setMetabolismError("Escolha o sexo da fórmula e informe idade, peso e altura.");
+    }
+    if (!payload.dailyRoutine || !payload.exerciseFrequency) {
+      return setMetabolismError("Responda como é sua rotina e com que frequência você se exercita.");
+    }
+    if (payload.exerciseFrequency !== "NONE" && (!payload.exerciseDuration || !payload.exerciseIntensity)) {
+      return setMetabolismError("Informe também a duração e a intensidade do treino.");
     }
     setMetabolismSaving(true);
     setMetabolismError("");
@@ -419,11 +500,6 @@ export function CaloriesScreen() {
               </View>
               <View style={styles.calorieTrack}><View style={[styles.calorieFill, { width: `${calorieProgress}%`, backgroundColor: status.color }]} /></View>
               <View style={styles.calorieNotice}><Gauge size={20} color={status.color} /><View style={{ flex: 1 }}><Text style={[styles.calorieNoticeTitle, { color: status.color }]}>{status.title}</Text><Text style={styles.calorieNoticeText}>{status.text}</Text></View></View>
-              <View style={styles.metabolismSummary}>
-                <View style={styles.metabolismSummaryItem}><Text style={styles.metabolismSummaryValue}>{nutritionProfile.basalCalories}</Text><Text style={styles.metabolismSummaryLabel}>TMB estimada</Text></View>
-                <View style={styles.metabolismSummaryDivider} />
-                <View style={styles.metabolismSummaryItem}><Text style={styles.metabolismSummaryValue}>{nutritionProfile.dailyCalorieTarget}</Text><Text style={styles.metabolismSummaryLabel}>referência diária</Text></View>
-              </View>
               <View style={styles.macroRow}>
                 <View style={styles.macroItem}><Text style={styles.macroValue}>{data.totalProteinGrams}g</Text><Text style={styles.macroLabel}>proteína</Text></View>
                 <View style={styles.macroItem}><Text style={styles.macroValue}>{data.totalCarbohydrateGrams}g</Text><Text style={styles.macroLabel}>carboidrato</Text></View>
@@ -541,6 +617,13 @@ export function TrainingAssistantScreen({ navigation }) {
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState("");
   const [pendingMessage, setPendingMessage] = useState(null);
+  const [speakingId, setSpeakingId] = useState(null);
+  const speechRunRef = useRef(0);
+
+  useEffect(() => () => {
+    speechRunRef.current += 1;
+    Speech.stop();
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -592,6 +675,36 @@ export function TrainingAssistantScreen({ navigation }) {
     }
   };
 
+  const toggleSpeech = async (item) => {
+    const stopOnly = speakingId === item.id;
+    const run = ++speechRunRef.current;
+    try {
+      await Speech.stop();
+      if (run !== speechRunRef.current) return;
+      if (stopOnly) {
+        setSpeakingId(null);
+        return;
+      }
+      setSpeakingId(item.id);
+      setActionError("");
+      Speech.speak(item.message, {
+        language: "pt-BR",
+        rate: 0.94,
+        pitch: 1,
+        onDone: () => run === speechRunRef.current && setSpeakingId(null),
+        onStopped: () => run === speechRunRef.current && setSpeakingId(null),
+        onError: () => {
+          if (run !== speechRunRef.current) return;
+          setSpeakingId(null);
+          setActionError("Não foi possível reproduzir a resposta em voz alta.");
+        },
+      });
+    } catch {
+      setSpeakingId(null);
+      setActionError("Não foi possível reproduzir a resposta em voz alta.");
+    }
+  };
+
   const video = asset?.type === "video" || asset?.mimeType?.startsWith("video/");
   return (
     <Screen header="Ajuda com treino" onBack={navigation.goBack} scroll={false} style={styles.trainingScreen}>
@@ -620,6 +733,17 @@ export function TrainingAssistantScreen({ navigation }) {
                   {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.chatImage} /> : null}
                   {item.videoUrl ? <View style={styles.chatVideo}><Video size={18} color={colors.primaryLight} /><Text style={styles.chatVideoText}>Vídeo enviado para análise</Text></View> : null}
                   <Text style={styles.chatText}>{item.message}</Text>
+                  {item.role === "ASSISTANT" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={speakingId === item.id ? "Parar leitura da resposta" : "Ouvir resposta da Luna"}
+                      onPress={() => toggleSpeech(item)}
+                      style={({ pressed }) => [styles.speechButton, speakingId === item.id && styles.speechButtonActive, pressed && styles.speechButtonPressed]}
+                    >
+                      {speakingId === item.id ? <Square size={12} color={colors.iconActive} fill={colors.iconActive} /> : <Volume2 size={15} color={colors.iconActive} />}
+                      <Text style={styles.speechButtonText}>{speakingId === item.id ? "Parar" : "Ouvir resposta"}</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ))}
               {pendingMessage ? (
@@ -677,10 +801,15 @@ const styles = StyleSheet.create({
   metabolismInputWrap: { height: 49, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
   metabolismInput: { flex: 1, height: "100%", padding: 0, borderWidth: 0, outlineStyle: "none", outlineWidth: 0, color: colors.text, fontFamily: fonts.bold, fontSize: 14, backgroundColor: "transparent" },
   metabolismUnit: { color: colors.subtle, fontSize: 8 },
-  activityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  activityOption: { width: "48.7%", minHeight: 59, padding: 10, justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
-  activityTitle: { color: colors.text, fontFamily: fonts.bold, fontSize: 10 },
-  activityHint: { marginTop: 3, color: colors.subtle, fontSize: 7, lineHeight: 10 },
+  questionBlock: { marginTop: 5, marginBottom: 17, paddingTop: 15, borderTopWidth: 1, borderTopColor: colors.line },
+  questionStep: { color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 7, letterSpacing: 1.05 },
+  questionTitle: { marginTop: 4, marginBottom: 10, color: colors.text, fontFamily: fonts.display, fontSize: 17, lineHeight: 21 },
+  questionOptions: { gap: 7 },
+  questionOptionsCompact: { flexDirection: "row", flexWrap: "wrap" },
+  questionOption: { minHeight: 54, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2 },
+  questionOptionCompact: { width: "48%" },
+  questionOptionTitle: { color: colors.text, fontFamily: fonts.bold, fontSize: 10 },
+  questionOptionHint: { marginTop: 3, color: colors.subtle, fontSize: 8, lineHeight: 11 },
   activityHintActive: { color: "rgba(24,14,10,.72)" },
   metabolismActions: { marginTop: 15, flexDirection: "row", gap: 8 },
   metabolismCancel: { minHeight: 50, paddingHorizontal: 15, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line, borderRadius: 15, backgroundColor: colors.surface2 },
@@ -716,11 +845,6 @@ const styles = StyleSheet.create({
   calorieNotice: { marginTop: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 15, backgroundColor: colors.surface2 },
   calorieNoticeTitle: { fontFamily: fonts.bold, fontSize: 11 },
   calorieNoticeText: { marginTop: 3, color: colors.muted, fontSize: 8, lineHeight: 12 },
-  metabolismSummary: { marginTop: 13, paddingVertical: 12, flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
-  metabolismSummaryItem: { flex: 1, alignItems: "center" },
-  metabolismSummaryValue: { color: colors.text, fontFamily: fonts.extraBold, fontSize: 19 },
-  metabolismSummaryLabel: { marginTop: 2, color: colors.subtle, fontSize: 8 },
-  metabolismSummaryDivider: { width: 1, height: 28, backgroundColor: colors.line },
   macroRow: { marginTop: 14, paddingTop: 16, flexDirection: "row", borderTopWidth: 1, borderTopColor: colors.line },
   macroItem: { flex: 1 },
   macroValue: { color: colors.text, fontFamily: fonts.bold, fontSize: 15 },
@@ -782,6 +906,10 @@ const styles = StyleSheet.create({
   chatBubbleAi: { alignSelf: "flex-start", borderWidth: 1, borderColor: colors.line, borderBottomLeftRadius: 5, backgroundColor: colors.surface },
   chatRole: { marginBottom: 5, color: colors.primaryLight, fontFamily: fonts.bold, fontSize: 7, letterSpacing: 1.1 },
   chatText: { color: colors.text, fontFamily: fonts.body, fontSize: 12, lineHeight: 19 },
+  speechButton: { alignSelf: "flex-start", minHeight: 34, marginTop: 11, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 11, backgroundColor: colors.surface2 },
+  speechButtonActive: { borderColor: colors.iconActive },
+  speechButtonPressed: { opacity: 0.72 },
+  speechButtonText: { color: colors.iconActive, fontFamily: fonts.semibold, fontSize: 9 },
   chatImage: { width: 210, height: 145, marginBottom: 9, borderRadius: 13 },
   chatVideo: { marginBottom: 8, padding: 10, flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 12, backgroundColor: colors.surface2 },
   chatVideoText: { color: colors.muted, fontSize: 9 },

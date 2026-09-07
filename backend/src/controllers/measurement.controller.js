@@ -42,10 +42,10 @@ const resolvePhotoModule = async (studentId, requestedModuleId) => {
   const modules = await availablePhotoModules(studentId);
   const module = requestedModuleId
     ? modules.find((item) => item.id === requestedModuleId)
-    : modules.filter((item) => !item.availability.isLocked).at(-1);
+    : modules.filter((item) => !item.photoAvailability.isLocked).at(-1);
   if (!module) throw new AppError(422, "Nenhum módulo da sua jornada está disponível para este registro.");
-  if (module.availability.isLocked)
-    throw new AppError(403, module.availability.reason || "Este módulo ainda não foi liberado.");
+  if (module.photoAvailability.isLocked)
+    throw new AppError(403, module.photoAvailability.reason || "O registro deste módulo ainda não foi liberado.");
   return module;
 };
 
@@ -62,13 +62,12 @@ export const create = async (req, res) => {
     where: { studentId: req.user.studentId },
     select: { id: true },
   });
-  if (!previous && (req.body.weightKg == null || req.body.heightCm == null)) {
+  if (!previous && req.body.weightKg == null) {
     const fieldErrors = {};
     if (req.body.weightKg == null) fieldErrors.weightKg = ["Informe seu peso inicial."];
-    if (req.body.heightCm == null) fieldErrors.heightCm = ["Informe sua altura inicial."];
     throw new AppError(
       422,
-      "Para criar seu ponto de partida, informe peso e altura. A gordura corporal é opcional.",
+      "Para criar seu ponto de partida, informe seu peso. As demais medidas são opcionais.",
       { fieldErrors, formErrors: [] },
     );
   }
@@ -90,6 +89,16 @@ export const listPhotos = async (req, res) =>
   );
 export const createPhoto = async (req, res) => {
   const module = await resolvePhotoModule(req.user.studentId, req.body.moduleId);
+  const existing = await prisma.progressPhoto.findFirst({
+    where: {
+      studentId: req.user.studentId,
+      moduleId: module.id,
+      pose: req.body.pose,
+    },
+    select: { id: true },
+  });
+  if (existing)
+    throw new AppError(409, "A foto inicial desta posição já foi registrada e será preservada.");
   const { moduleId: _requestedModuleId, ...data } = req.body;
   res.status(201).json(
     await prisma.progressPhoto.create({

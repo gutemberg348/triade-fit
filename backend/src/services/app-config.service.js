@@ -3,9 +3,59 @@ import { absolutePublicUrl } from "../utils/publicUrl.js";
 
 export const APP_CONFIG_ID = "app";
 
+export const APP_THEME_PRESETS = {
+  CHAMPAGNE_NUDE: {
+    background: "#F1E3D6",
+    cardBackground: "#F8EFE7",
+    secondaryBackground: "#E8D3C2",
+    button: "#C97D74",
+    buttonPressed: "#B96D65",
+    title: "#301F19",
+    text: "#60483D",
+    secondaryText: "#8A6F62",
+    border: "#D9C2B2",
+    activeIcon: "#B96D65",
+    inactiveIcon: "#8A6F62",
+  },
+  TRIADE_DARK: {
+    background: "#100B0A",
+    cardBackground: "#1C1311",
+    secondaryBackground: "#241815",
+    button: "#E8885B",
+    buttonPressed: "#9E3F22",
+    title: "#FFFFFF",
+    text: "#E3D2C9",
+    secondaryText: "#C9AEA1",
+    border: "#4D352B",
+    activeIcon: "#E8885B",
+    inactiveIcon: "#C9AEA1",
+  },
+};
+
+const normalizeTheme = (config) => {
+  const presetName = Object.prototype.hasOwnProperty.call(
+    APP_THEME_PRESETS,
+    config.themePreset,
+  )
+    ? config.themePreset
+    : "CHAMPAGNE_NUDE";
+  const custom = config.themeColors;
+  return {
+    themePreset: presetName,
+    themeColors: {
+      ...APP_THEME_PRESETS[presetName],
+      ...(custom && typeof custom === "object" && !Array.isArray(custom)
+        ? custom
+        : {}),
+    },
+  };
+};
+
 export const DEFAULT_APP_CONFIG = {
   id: APP_CONFIG_ID,
   appName: "Triade FIT",
+  themePreset: "CHAMPAGNE_NUDE",
+  themeColors: APP_THEME_PRESETS.CHAMPAGNE_NUDE,
   loginImageUrl: "/brand/triade-fit-login.png",
   loginEyebrow: "SUA JORNADA COMEÇA AQUI",
   loginHeadline: "Seu corpo pede equilíbrio.",
@@ -59,11 +109,15 @@ export const calculatePlan = (config) => {
   };
 };
 
-export const serializeAppConfig = (config, baseUrl) => ({
-  ...config,
-  loginImageUrl: absolutePublicUrl(config.loginImageUrl, baseUrl),
-  homeBannerUrl: absolutePublicUrl(config.homeBannerUrl, baseUrl),
-  paymentBannerUrl: absolutePublicUrl(config.paymentBannerUrl, baseUrl),
-  cardInterestPercent: Number(config.cardInterestPercent),
-  plan: calculatePlan(config),
-});
+export const serializeAppConfig = (config, baseUrl) => {
+  const theme = normalizeTheme(config);
+  return {
+    ...config,
+    ...theme,
+    loginImageUrl: absolutePublicUrl(config.loginImageUrl, baseUrl),
+    homeBannerUrl: absolutePublicUrl(config.homeBannerUrl, baseUrl),
+    paymentBannerUrl: absolutePublicUrl(config.paymentBannerUrl, baseUrl),
+    cardInterestPercent: Number(config.cardInterestPercent),
+    plan: calculatePlan(config),
+  };
+};

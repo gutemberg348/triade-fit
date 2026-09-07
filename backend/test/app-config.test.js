@@ -1,6 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculatePlan } from "../src/services/app-config.service.js";
+import {
+  APP_THEME_PRESETS,
+  calculatePlan,
+} from "../src/services/app-config.service.js";
+import { appConfigSchema } from "../src/validators/admin.validators.js";
+
+test("mantém Champagne Nude e o tema escuro original como presets", () => {
+  assert.equal(APP_THEME_PRESETS.CHAMPAGNE_NUDE.background, "#F1E3D6");
+  assert.equal(APP_THEME_PRESETS.CHAMPAGNE_NUDE.button, "#C97D74");
+  assert.equal(APP_THEME_PRESETS.TRIADE_DARK.background, "#100B0A");
+  assert.equal(APP_THEME_PRESETS.TRIADE_DARK.button, "#E8885B");
+});
+
+test("aceita somente as onze cores completas em hexadecimal", () => {
+  const schema = appConfigSchema.pick({ themePreset: true, themeColors: true });
+  const valid = schema.safeParse({
+    themePreset: "CHAMPAGNE_NUDE",
+    themeColors: APP_THEME_PRESETS.CHAMPAGNE_NUDE,
+  });
+  const invalid = schema.safeParse({
+    themePreset: "CHAMPAGNE_NUDE",
+    themeColors: {
+      ...APP_THEME_PRESETS.CHAMPAGNE_NUDE,
+      button: "rosa",
+    },
+  });
+  assert.equal(valid.success, true);
+  assert.equal(invalid.success, false);
+});
 
 test("calcula total, juros e parcela do cartão em centavos", () => {
   const plan = calculatePlan({

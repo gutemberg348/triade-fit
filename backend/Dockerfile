@@ -27,8 +27,8 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/backend ./backend
 
-# O volume de uploads e montado neste caminho pelo Compose.
-RUN mkdir -p /app/backend/uploads
+# Os volumes de uploads e conhecimento da Luna sao montados nestes caminhos.
+RUN mkdir -p /app/backend/uploads /app/backend/knowledge/training
 
 EXPOSE 3333
 

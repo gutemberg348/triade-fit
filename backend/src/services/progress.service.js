@@ -74,51 +74,43 @@ const moduleCompletionAt = (module) => {
 export function withContentModulesAvailability(modules, now = new Date()) {
   const enriched = modules.map((module) => withModuleProgress(module, now));
   return enriched.map((module, index) => {
-    if (module.progressPercent === 100 || index === 0)
-      return {
-        ...module,
-        availability: { isLocked: false, unlocksAt: null, reason: null },
-      };
-
-    const previous = enriched[index - 1];
-    const previousCompletedAt = moduleCompletionAt(previous);
-    if (!previousCompletedAt)
-      return {
-        ...module,
-        availability: {
+    const previous = index > 0 ? enriched[index - 1] : null;
+    const previousCompletedAt = previous ? moduleCompletionAt(previous) : null;
+    const photoAvailability = index === 0 || previousCompletedAt
+      ? { isLocked: false, unlocksAt: null, reason: null }
+      : {
           isLocked: true,
           unlocksAt: null,
-          reason: `Conclua o módulo “${previous.title}” para liberar este conteúdo.`,
-        },
-      };
+          reason: `Conclua o módulo “${previous.title}” para liberar o próximo registro visual.`,
+        };
 
-    const delayDays = module.unlockDelayDays || 0;
-    if (!delayDays)
-      return {
-        ...module,
-        availability: { isLocked: false, unlocksAt: null, reason: null },
-      };
-
-    const unlocksAt = new Date(
-      previousCompletedAt.getTime() + delayDays * 24 * 60 * 60 * 1000,
-    );
-    if (unlocksAt <= now)
-      return {
-        ...module,
-        availability: {
-          isLocked: false,
-          unlocksAt: unlocksAt.toISOString(),
-          reason: null,
-        },
-      };
-    return {
-      ...module,
-      availability: {
+    let availability;
+    if (module.progressPercent === 100 || index === 0) {
+      availability = { isLocked: false, unlocksAt: null, reason: null };
+    } else if (!previousCompletedAt) {
+      availability = {
         isLocked: true,
-        unlocksAt: unlocksAt.toISOString(),
-        reason: `Este módulo abre ${delayDays} dia${delayDays === 1 ? "" : "s"} após concluir o anterior.`,
-      },
-    };
+        unlocksAt: null,
+        reason: `Conclua o módulo “${previous.title}” para liberar este conteúdo.`,
+      };
+    } else {
+      const delayDays = module.unlockDelayDays || 0;
+      if (!delayDays) {
+        availability = { isLocked: false, unlocksAt: null, reason: null };
+      } else {
+        const unlocksAt = new Date(
+          previousCompletedAt.getTime() + delayDays * 24 * 60 * 60 * 1000,
+        );
+        availability = unlocksAt <= now
+          ? { isLocked: false, unlocksAt: unlocksAt.toISOString(), reason: null }
+          : {
+              isLocked: true,
+              unlocksAt: unlocksAt.toISOString(),
+              reason: `Este módulo abre ${delayDays} dia${delayDays === 1 ? "" : "s"} após concluir o anterior.`,
+            };
+      }
+    }
+    return { ...module, availability, photoAvailability };
   });
 }
 

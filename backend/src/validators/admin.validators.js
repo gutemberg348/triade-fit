@@ -184,6 +184,20 @@ const appConfigUrl = z
 
 export const appConfigSchema = z.object({
   appName: z.string().trim().min(2).max(60),
+  themePreset: z.enum(["CHAMPAGNE_NUDE", "TRIADE_DARK"]),
+  themeColors: z.object({
+    background: z.string().regex(/^#[0-9A-F]{6}$/i),
+    cardBackground: z.string().regex(/^#[0-9A-F]{6}$/i),
+    secondaryBackground: z.string().regex(/^#[0-9A-F]{6}$/i),
+    button: z.string().regex(/^#[0-9A-F]{6}$/i),
+    buttonPressed: z.string().regex(/^#[0-9A-F]{6}$/i),
+    title: z.string().regex(/^#[0-9A-F]{6}$/i),
+    text: z.string().regex(/^#[0-9A-F]{6}$/i),
+    secondaryText: z.string().regex(/^#[0-9A-F]{6}$/i),
+    border: z.string().regex(/^#[0-9A-F]{6}$/i),
+    activeIcon: z.string().regex(/^#[0-9A-F]{6}$/i),
+    inactiveIcon: z.string().regex(/^#[0-9A-F]{6}$/i),
+  }),
   loginImageUrl: appConfigUrl,
   loginEyebrow: z.string().trim().min(2).max(80),
   loginHeadline: z.string().trim().min(2).max(140),
@@ -198,4 +212,9 @@ export const appConfigSchema = z.object({
   cardBasePriceCents: z.coerce.number().int().min(100).max(100000000),
   cardInstallments: z.coerce.number().int().min(1).max(21),
   cardInterestPercent: z.coerce.number().min(0).max(999.99),
+});
+
+export const trainingAiConfigSchema = z.object({
+  prompt: z.string().trim().min(80).max(12000),
+  knowledge: z.string().trim().min(80).max(100000),
 });

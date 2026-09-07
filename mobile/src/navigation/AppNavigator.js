@@ -1,11 +1,11 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { NavigationContainer, DarkTheme } from "@react-navigation/native";
+import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Dumbbell, Flame, Home, MessageCircle, TrendingUp, User } from "lucide-react-native";
 import { useAuth } from "../contexts/AuthContext.js";
-import { colors, fonts } from "../theme/index.js";
+import { colors, fonts, isDarkAppTheme } from "../theme/index.js";
 import {
   ForgotPasswordScreen,
   AccessPendingScreen,
@@ -70,7 +70,7 @@ function BottomBar({ state, descriptors, navigation }) {
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         const Icon = tabIcons[route.name];
-        const color = focused ? colors.primaryLight : colors.subtle;
+        const color = focused ? colors.iconActive : colors.iconInactive;
         const onPress = () => {
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
           if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
@@ -95,6 +95,7 @@ function BottomBar({ state, descriptors, navigation }) {
 }
 export default function AppNavigator() {
   const { user, booting } = useAuth();
+  const navigationTheme = isDarkAppTheme() ? DarkTheme : DefaultTheme;
   if (booting)
     return (
       <View style={styles.boot}>
@@ -104,13 +105,13 @@ export default function AppNavigator() {
   return (
     <NavigationContainer
       theme={{
-        ...DarkTheme,
+        ...navigationTheme,
         colors: {
-          ...DarkTheme.colors,
+          ...navigationTheme.colors,
           background: colors.bg,
           card: colors.surface,
           border: colors.line,
-          primary: colors.copperLight,
+          primary: colors.iconActive,
           text: colors.text,
         },
       }}
@@ -184,11 +185,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.line,
     borderRadius: 24,
-    backgroundColor: "rgba(28,19,17,.98)",
+    backgroundColor: colors.surface,
     elevation: 18,
   },
   tabItem: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 3, borderRadius: 16 },
-  tabItemPressed: { backgroundColor: "rgba(255,255,255,.04)" },
+  tabItemPressed: { backgroundColor: colors.surface2 },
   tabLabel: { width: "100%", fontFamily: fonts.semibold, fontSize: 7, lineHeight: 11, textAlign: "center" },
-  tabIndicator: { position: "absolute", top: 0, width: 17, height: 2, borderRadius: 2, backgroundColor: colors.primaryLight },
+  tabIndicator: { position: "absolute", top: 0, width: 17, height: 2, borderRadius: 2, backgroundColor: colors.iconActive },
 });
